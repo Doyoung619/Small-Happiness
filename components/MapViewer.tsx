@@ -8,6 +8,7 @@ import BubblePin from "./BubblePin";
 import { Pin } from "@/lib/mockPins";
 import { clusterPins } from "@/lib/clustering";
 import { GeoPoint } from "@/lib/routeOptimization";
+import { useRuntimeConfig } from "@/components/RuntimeProviders";
 
 const libraries: ("places")[] = ["places"];
 
@@ -84,9 +85,10 @@ export default function MapViewer({
   onCenterChanged,
   userLocation,
 }: MapViewerProps) {
+  const { googleMapsApiKey } = useRuntimeConfig();
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    googleMapsApiKey,
     libraries,
   });
 

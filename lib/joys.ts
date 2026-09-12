@@ -1,6 +1,6 @@
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { apiFetch } from "./api";
-import { storage } from "./firebase";
+import { firebaseStorage } from "./firebase";
 import { normalizeLanguage } from "./languages";
 import { Pin } from "./mockPins";
 import { Song } from "./music";
@@ -57,6 +57,7 @@ export async function createJoy({
 }) {
   let imageUrl = "";
   if (photo) {
+    const storage = firebaseStorage();
     const imageRef = ref(storage, `joys/${uid}/${crypto.randomUUID()}`);
     await uploadBytes(imageRef, photo, { contentType: photo.type });
     imageUrl = await getDownloadURL(imageRef);

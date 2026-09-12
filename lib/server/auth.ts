@@ -5,7 +5,8 @@ export async function requireUser(request: NextRequest) {
   const token = header?.startsWith("Bearer ") ? header.slice(7) : "";
   if (!token) throw new Error("Missing auth token");
 
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const apiKeyVariable = "NEXT_PUBLIC_FIREBASE_API_KEY";
+  const apiKey = process.env[apiKeyVariable];
   if (!apiKey) throw new Error("Firebase API key is missing");
   const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
     method: "POST",

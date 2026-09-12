@@ -1,6 +1,7 @@
-import { auth } from "./firebase";
+import { firebaseAuth } from "./firebase";
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}) {
+  const auth = firebaseAuth();
   const token = await auth.currentUser?.getIdToken();
   const response = await fetch(path, {
     ...init,

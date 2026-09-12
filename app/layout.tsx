@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
-import { AuthProvider } from "@/components/AuthProvider";
+import { RuntimeProviders } from "@/components/RuntimeProviders";
 
 export const metadata: Metadata = {
   title: "JoyWalk — Micro-Happiness Map",
@@ -17,10 +17,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="font-body antialiased" style={{ background: "#0d0c14", color: "#fff" }}>
-        <AuthProvider>
+        <RuntimeProviders>
           <main>{children}</main>
           <BottomNav />
-        </AuthProvider>
+        </RuntimeProviders>
       </body>
     </html>
   );

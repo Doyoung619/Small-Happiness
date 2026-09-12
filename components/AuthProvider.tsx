@@ -12,7 +12,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { auth } from "@/lib/firebase";
+import { firebaseAuth } from "@/lib/firebase";
 import { ensureUserProfile } from "@/lib/friends";
 
 const googleProvider = new GoogleAuthProvider();
@@ -35,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signingIn = useRef(false);
 
   useEffect(() => {
+    const auth = firebaseAuth();
     void setPersistence(auth, browserLocalPersistence).catch(() => {});
     return onAuthStateChanged(auth, (nextUser) => {
       if (nextUser) {
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
+    const auth = firebaseAuth();
     if (auth.currentUser?.isAnonymous) {
       try {
         const credential = await linkWithPopup(auth.currentUser, googleProvider);
@@ -70,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const changeName = async (name: string) => {
+    const auth = firebaseAuth();
     if (!auth.currentUser) return;
     await updateProfile(auth.currentUser, { displayName: name.trim() });
     setUser(auth.currentUser);
