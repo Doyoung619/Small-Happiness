@@ -3,8 +3,8 @@ import { JoyCategory } from "@/lib/mockPins";
 export const dynamic = "force-dynamic";
 
 const XAI_RESPONSES_URL = "https://api.x.ai/v1/responses";
-const CACHE_NAME = "joywalk-grok-spots-v1";
-const CACHE_KEY = "https://joywalk.internal/api/x-spots/v1";
+const CACHE_NAME = "joywalk-grok-spots-v2";
+const CACHE_KEY = "https://joywalk.internal/api/x-spots/v2";
 const CACHE_SECONDS = 6 * 60 * 60;
 const ALLOWED_CATEGORIES = new Set<JoyCategory>([
   "dog", "nature", "cafe", "music", "art", "view", "food", "other",
@@ -54,7 +54,7 @@ function normalizeXUrl(value: string) {
   }
 }
 
-function cleanSpot(raw: Partial<XSpot>, index: number): XSpot & { id: string; imageUrl: string; sharedAt: string; sourceType: "grok-x"; sourceLabel: string } | null {
+function cleanSpot(raw: Partial<XSpot>, index: number): XSpot & { id: string; imageUrl: string; author: string; sharedAt: string; sourceType: "grok-x"; sourceLabel: string } | null {
   const lat = Number(raw.lat);
   const lng = Number(raw.lng);
   const sourceUrl = normalizeXUrl(String(raw.sourceUrl || ""));
@@ -76,6 +76,7 @@ function cleanSpot(raw: Partial<XSpot>, index: number): XSpot & { id: string; im
     location: String(raw.location || "Pittsburgh").slice(0, 80),
     sourceUrl,
     sourceHandle,
+    author: sourceHandle,
     category,
     tags: Array.isArray(raw.tags)
       ? raw.tags.map(String).map((tag) => tag.trim().slice(0, 24)).filter(Boolean).slice(0, 3)

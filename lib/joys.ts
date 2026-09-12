@@ -9,7 +9,7 @@ export type Joy = Pin & {
 };
 
 const LOCAL_JOYS_KEY = "joywalk-demo-joys";
-const GROK_SPOTS_KEY = "joywalk-grok-spots-v1";
+const GROK_SPOTS_KEY = "joywalk-grok-spots-v2";
 const GROK_CACHE_MS = 6 * 60 * 60 * 1000;
 
 function asPublicJoys(pins: Pin[], prefix: string): Joy[] {
