@@ -157,12 +157,14 @@ async function discoverSpots(apiKey: string) {
         },
       },
     }),
-    signal: AbortSignal.timeout(28_000),
+    signal: AbortSignal.timeout(55_000),
   });
 
   if (!response.ok) throw new Error(`xAI request failed (${response.status})`);
   const body = await response.json() as GrokResponse;
-  if (!body.output?.some((item) => item.type === "x_search_call")) {
+  // The Responses REST API currently serializes hosted X Search as
+  // `custom_tool_call`; older SDK-shaped responses use `x_search_call`.
+  if (!body.output?.some((item) => item.type === "x_search_call" || item.type === "custom_tool_call")) {
     throw new Error("Grok did not use X Search");
   }
   const text = outputText(body);
