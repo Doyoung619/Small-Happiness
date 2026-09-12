@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
@@ -44,6 +45,7 @@ function MapPageContent() {
   const [error, setError] = useState("");
   const [routeSummaryOpen, setRouteSummaryOpen] = useState(true);
   const [locatePulse, setLocatePulse] = useState(false);
+  const [recenterKey, setRecenterKey] = useState(0);
   const locatePulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const originStr = searchParams.get("origin");
@@ -107,8 +109,12 @@ function MapPageContent() {
   }, [user]);
 
   useEffect(() => {
-    return subscribeToJoys(setJoys, () => setError("Could not load joys yet."), profile?.language);
-  }, [profile?.language]);
+    if (!user) return;
+    return subscribeToJoys((nextJoys) => {
+      setJoys(nextJoys);
+      setError("");
+    }, () => setError("Could not load joys yet."), profile?.language);
+  }, [profile?.language, user]);
 
   useEffect(() => {
     const watchId = navigator.geolocation.watchPosition(
@@ -119,18 +125,20 @@ function MapPageContent() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  const focusMyLocation = (location: { lat: number; lng: number }) => {
+    setError("");
+    setUserLocation(location);
+    setCenter(location);
+    setRecenterKey((key) => key + 1);
+    setLocatePulse(true);
+    if (locatePulseTimer.current) clearTimeout(locatePulseTimer.current);
+    locatePulseTimer.current = setTimeout(() => setLocatePulse(false), 900);
+  };
+
   const locateMe = () => {
+    if (userLocation) return focusMyLocation(userLocation);
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        const location = { lat: coords.latitude, lng: coords.longitude };
-        setUserLocation(location);
-        setCenter(location);
-        setLocatePulse(true);
-        if (locatePulseTimer.current) {
-          clearTimeout(locatePulseTimer.current);
-        }
-        locatePulseTimer.current = setTimeout(() => setLocatePulse(false), 900);
-      },
+      ({ coords }) => focusMyLocation({ lat: coords.latitude, lng: coords.longitude }),
       () => setError("Location permission is needed to find you."),
       { enableHighAccuracy: true, timeout: 10000 },
     );
@@ -275,6 +283,7 @@ function MapPageContent() {
         <MapViewer
           pins={displayJoys}
           center={center}
+          recenterKey={recenterKey}
           zoom={15}
           origin={routeOrigin}
           destination={routeDestination}
@@ -374,7 +383,7 @@ function MapPageContent() {
             pointerEvents: "auto",
           }}
         >
-          ✨
+          <Image src="/camera.png" alt="" width={46} height={46} style={{ objectFit: "contain", imageRendering: "pixelated" }} />
         </Link>
       </div>
 

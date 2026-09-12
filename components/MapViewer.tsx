@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/refs */
 
 import { useCallback, useRef, useState, useEffect } from "react";
+import Image from "next/image";
 import { GoogleMap, useJsApiLoader, OverlayView, DirectionsRenderer } from "@react-google-maps/api";
 import BubblePin from "./BubblePin";
 import { Pin } from "@/lib/mockPins";
@@ -15,6 +16,7 @@ const libraries: ("places")[] = ["places"];
 interface MapViewerProps {
   pins: Pin[];
   center?: { lat: number; lng: number };
+  recenterKey?: number;
   zoom?: number;
   origin?: string | GeoPoint | null;
   destination?: string | GeoPoint | null;
@@ -74,6 +76,7 @@ const mapOptions = {
 export default function MapViewer({
   pins,
   center = { lat: 40.4433, lng: -79.9436 },
+  recenterKey = 0,
   zoom = 14,
   origin,
   destination,
@@ -138,6 +141,10 @@ export default function MapViewer({
     mapRef.current?.panTo({ lat: selectedPin.lat, lng: selectedPin.lng });
   }, [activePinId, pins]);
 
+  useEffect(() => {
+    if (recenterKey) mapRef.current?.panTo(center);
+  }, [center, recenterKey]);
+
   const clusters = clusterPins(pins, currentZoom);
 
   const zoomChanged = useCallback(() => {
@@ -192,7 +199,9 @@ export default function MapViewer({
     >
       {userLocation && (
         <OverlayView position={userLocation} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-          <div className="user-location-marker" role="img" aria-label="Your location"><span /></div>
+          <div className={`user-location-marker ${mapMoving ? "is-paused" : ""}`} role="img" aria-label="Your location">
+            <Image src="/my.png" alt="" width={417} height={457} priority unoptimized />
+          </div>
         </OverlayView>
       )}
 
@@ -227,7 +236,7 @@ export default function MapViewer({
                 className="map-bubble-button"
                 style={{ position: "absolute", transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer", pointerEvents: "auto", border: 0, padding: 0, background: "none", color: "#111827" }}
               >
-                <BubblePin emoji={pin.emoji} hue={pin.hue} selected={activePinId === pin.id} bursting={burstingPinId === pin.id} floatDelay={-(index % 7) * 0.35} floatPaused={mapMoving} sourceType={pin.sourceType} />
+                <BubblePin emoji={pin.emoji} hue={waypoints.some((waypoint) => waypoint.id === pin.id) ? 82 : pin.hue} selected={activePinId === pin.id} bursting={burstingPinId === pin.id} floatDelay={-(index % 7) * 0.35} floatPaused={mapMoving} sourceType={pin.sourceType} />
                 {pin.label && <span style={{ fontSize: "11px", fontWeight: 600, color: "#111827", pointerEvents: "none", whiteSpace: "nowrap" }}>{pin.label}</span>}
               </button>
             );

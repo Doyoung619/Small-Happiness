@@ -1,5 +1,8 @@
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { apiFetch } from "./api";
+import { firebaseStorage } from "./firebase";
 import { normalizeLanguage } from "./languages";
-import { MOCK_PINS, Pin, SEUNGYEON_PINS } from "./mockPins";
+import { Pin } from "./mockPins";
 import { Song } from "./music";
 
 export type Joy = Pin & {
@@ -8,7 +11,6 @@ export type Joy = Pin & {
   sourceLanguage?: string;
 };
 
-const LOCAL_JOYS_KEY = "joywalk-demo-joys";
 const GROK_SPOTS_KEY = "joywalk-grok-spots-v2";
 const GROK_CACHE_MS = 6 * 60 * 60 * 1000;
 
@@ -23,13 +25,6 @@ function asPublicJoys(pins: Pin[], prefix: string): Joy[] {
   }));
 }
 
-function seededJoys(): Joy[] {
-  return [
-    ...asPublicJoys(SEUNGYEON_PINS, "seungyeon"),
-    ...asPublicJoys(MOCK_PINS, "demo"),
-  ];
-}
-
 function cachedGrokJoys(): Joy[] {
   if (typeof window === "undefined") return [];
   try {
@@ -38,17 +33,6 @@ function cachedGrokJoys(): Joy[] {
     return asPublicJoys(cached.spots, "grok-x");
   } catch {
     return [];
-  }
-}
-
-function localJoys(): Joy[] {
-  if (typeof window === "undefined") return seededJoys();
-  try {
-    const saved = JSON.parse(localStorage.getItem(LOCAL_JOYS_KEY) || "[]") as Array<Joy & { expiresAt?: number }>;
-    const now = Date.now();
-    return [...saved.filter((joy) => !joy.expiresAt || joy.expiresAt > now), ...cachedGrokJoys(), ...seededJoys()];
-  } catch {
-    return seededJoys();
   }
 }
 
@@ -64,10 +48,16 @@ export function subscribeToJoys(
   language?: string,
 ) {
   let alive = true;
-  void preferredLanguage(language);
-  void onError;
-  const load = () => alive && onData(localJoys());
-  load();
+  let communityJoys: Joy[] = [];
+  let grokJoys = cachedGrokJoys();
+  const emit = () => alive && onData([...communityJoys, ...grokJoys]);
+  emit();
+  void apiFetch<{ joys: Joy[] }>(`/api/joys?language=${preferredLanguage(language)}`)
+    .then(({ joys }) => {
+      communityJoys = joys.map((joy) => ({ ...joy, sourceType: joy.sourceType || "community" }));
+      emit();
+    })
+    .catch((error) => alive && onError(error.message));
   void fetch("/api/x-spots")
     .then((response) => response.ok ? response.json() : Promise.reject(new Error("X Search request failed")))
     .then((payload: { spots?: Pin[] }) => {
@@ -76,18 +66,14 @@ export function subscribeToJoys(
         spots: payload.spots,
         expiresAt: Date.now() + GROK_CACHE_MS,
       }));
-      load();
+      grokJoys = asPublicJoys(payload.spots, "grok-x");
+      emit();
     })
     .catch(() => {
       // The seeded community map remains fully usable while Grok refreshes.
     });
-  const refresh = () => load();
-  window.addEventListener("joywalk:joys-changed", refresh);
-  window.addEventListener("storage", refresh);
   return () => {
     alive = false;
-    window.removeEventListener("joywalk:joys-changed", refresh);
-    window.removeEventListener("storage", refresh);
   };
 }
 
@@ -114,28 +100,15 @@ export async function createJoy({
   durationHours?: 1 | 6 | 12 | 24 | 168;
   song?: Song;
 }) {
-  const id = `local-${crypto.randomUUID()}`;
-  const imageUrl = photo ? URL.createObjectURL(photo) : `https://picsum.photos/seed/${encodeURIComponent(id)}/600/400`;
-  const joy: Joy & { expiresAt: number } = {
-    id,
-    authorId: uid,
-    author: author?.trim() || `guest-${uid.slice(0, 6)}`,
-    title: text.length > 34 ? `${text.slice(0, 34)}…` : text,
-    description: text,
-    emoji,
-    imageUrl,
-    lat,
-    lng,
-    visibility,
-    category: "other",
-    tags: ["hidden gem"],
-    sharedAt: "just now",
-    sourceLanguage: preferredLanguage(),
-    song,
-    expiresAt: Date.now() + durationHours * 60 * 60 * 1000,
-  };
-  const saved = localJoys().filter((item) => item.id.startsWith("local-")).slice(0, 19);
-  localStorage.setItem(LOCAL_JOYS_KEY, JSON.stringify([joy, ...saved]));
-  window.dispatchEvent(new Event("joywalk:joys-changed"));
-  return { id };
+  let imageUrl = "";
+  if (photo) {
+    const imageRef = ref(firebaseStorage(), `joys/${uid}/${crypto.randomUUID()}`);
+    await uploadBytes(imageRef, photo, { contentType: photo.type });
+    imageUrl = await getDownloadURL(imageRef);
+  }
+
+  return apiFetch<{ id: string }>("/api/joys", {
+    method: "POST",
+    body: JSON.stringify({ author: author?.trim() || `guest-${uid.slice(0, 6)}`, text, emoji, imageUrl, lat, lng, visibility, durationHours, song }),
+  });
 }

@@ -188,24 +188,26 @@ button, input, select, textarea {
 
 .user-location-marker {
   position: absolute;
-  width: 38px;
-  height: 38px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: rgba(59, 130, 246, 0.2);
-  animation: userLocationPulse 2s ease-out infinite;
-  display: grid;
-  place-items: center;
+  width: 68px;
+  height: 74px;
+  transform: translate(-50%, -100%);
   pointer-events: none;
 }
 
-.user-location-marker span {
-  width: 15px;
-  height: 15px;
-  border: 3px solid #fff;
-  border-radius: 50%;
-  background: #3b82f6;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+.user-location-marker img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 5px 6px rgba(0, 0, 0, 0.35));
+  transform-origin: 50% 100%;
+  animation: userLocationBreathe 2.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.user-location-marker.is-paused img {
+  animation-play-state: paused;
 }
 
 .joy-cluster:active {
@@ -246,9 +248,9 @@ button, input, select, textarea {
   100% { transform: scale(1.4); opacity: 0; }
 }
 
-@keyframes userLocationPulse {
-  0%, 45% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.35); }
-  100% { box-shadow: 0 0 0 18px rgba(59, 130, 246, 0); }
+@keyframes userLocationBreathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.92); }
 }
 
 @keyframes locateCore {
@@ -311,6 +313,6 @@ button, input, select, textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sheet-enter, .sticker-pop, .user-location-marker { animation: none; }
+  .sheet-enter, .sticker-pop, .user-location-marker img { animation: none; }
   *, *::before, *::after { transition-duration: 50ms !important; }
 }

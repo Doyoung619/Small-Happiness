@@ -123,8 +123,8 @@ export default function BubblePin({ emoji, hue = 223, selected = false, bursting
         }
 
         @keyframes bubbleFloat {
-          from { transform: translateY(-2px); }
-          to { transform: translateY(2px); }
+          from { transform: translateY(-4px); }
+          to { transform: translateY(4px); }
         }
 
         @keyframes bubbleBurst {
