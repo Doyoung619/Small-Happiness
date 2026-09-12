@@ -104,12 +104,13 @@ async function discoverSpots(apiKey: string) {
     body: JSON.stringify({
       model: "grok-4.6",
       store: false,
+      reasoning: { effort: "low" },
       max_turns: 2,
       input: [
         {
           role: "user",
           content: [
-            "Use X Search now. Find 3 to 5 recent public posts about small, positive, visitable moments in Pittsburgh, especially Oakland, CMU, Pitt, Shadyside, Squirrel Hill, Downtown, the Strip, or the North Shore.",
+            "Use X Search now. Find 2 or 3 recent public posts about small, positive, visitable moments in Pittsburgh, especially Oakland, CMU, Pitt, Shadyside, Squirrel Hill, Downtown, the Strip, or the North Shore.",
             "Return only places a visitor can safely reach in public. Exclude private homes, emergencies, politics, ads, vague city-wide commentary, and events that have already ended.",
             "Each result must cite the exact X status URL you actually used. Paraphrase instead of copying post text. Coordinates may be a careful landmark-level approximation, but must be within Pittsburgh.",
           ].join(" "),
@@ -132,8 +133,8 @@ async function discoverSpots(apiKey: string) {
             properties: {
               spots: {
                 type: "array",
-                minItems: 3,
-                maxItems: 5,
+                minItems: 2,
+                maxItems: 3,
                 items: {
                   type: "object",
                   additionalProperties: false,
@@ -199,7 +200,8 @@ export async function GET() {
     const response = json(payload);
     await writeEdgeCache(response.clone());
     return response;
-  } catch {
+  } catch (error) {
+    console.error("Grok X Search refresh failed:", error instanceof Error ? error.message : "Unknown error");
     // Keep the public demo stable even if the API is out of quota or X has no safe matches.
     return json({ spots: [], provider: "fallback", error: "Using community spots while Grok refreshes." }, 200, false);
   }
