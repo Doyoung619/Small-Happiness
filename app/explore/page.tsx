@@ -25,9 +25,8 @@ export default function ExplorePage() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
     return subscribeToJoys(setJoys, () => setError("Could not load joys."), profile?.language);
-  }, [user, profile?.language]);
+  }, [profile?.language]);
 
   const visible = filter === "mine"
     ? joys.filter((joy) => joy.authorId === user?.uid)

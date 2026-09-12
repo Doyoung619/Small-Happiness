@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import MapViewer from "@/components/MapViewer";
+import { useRuntimeConfig } from "@/components/RuntimeProviders";
 import { detectEmojis } from "@/lib/autoEmoji";
 import { createJoy } from "@/lib/joys";
 import { searchSongs, Song } from "@/lib/music";
@@ -48,7 +49,8 @@ export default function AddJoyPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  const { isLoaded } = useJsApiLoader({ id: "google-map-script", googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "", libraries });
+  const { googleMapsApiKey } = useRuntimeConfig();
+  const { isLoaded } = useJsApiLoader({ id: "google-map-script", googleMapsApiKey, libraries });
 
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());

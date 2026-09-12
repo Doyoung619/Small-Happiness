@@ -12,6 +12,7 @@ import { rankJoySpots, toJoySpot } from "@/lib/recommendation";
 import { buildWalkingDistanceMatrix, findOptimalVisitOrder, GeoPoint } from "@/lib/routeOptimization";
 import { filterPinsInBox, getBoundingBox } from "@/lib/routing";
 import MapViewer from "@/components/MapViewer";
+import { useRuntimeConfig } from "@/components/RuntimeProviders";
 
 const libraries: ("places")[] = ["places"];
 type PlaceChoice = { label: string; location?: GeoPoint };
@@ -86,7 +87,8 @@ export default function SearchPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
-  const { isLoaded } = useJsApiLoader({ id: "google-map-script", googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "", libraries });
+  const { googleMapsApiKey } = useRuntimeConfig();
+  const { isLoaded } = useJsApiLoader({ id: "google-map-script", googleMapsApiKey, libraries });
   const previewRoute = routeCandidates[selectedRouteIndex];
   useEffect(() => {
     if (!user) return;
@@ -94,9 +96,8 @@ export default function SearchPage() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
     return subscribeToJoys(setJoys, () => setError("Could not load Joy Spots."), profile?.language);
-  }, [user, profile?.language]);
+  }, [profile?.language]);
 
   useEffect(() => {
     if (!isLoaded || !origin.location || !destination.location || joys.length < 2) {

@@ -107,9 +107,8 @@ function MapPageContent() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
     return subscribeToJoys(setJoys, () => setError("Could not load joys yet."), profile?.language);
-  }, [user, profile?.language]);
+  }, [profile?.language]);
 
   useEffect(() => {
     const watchId = navigator.geolocation.watchPosition(
