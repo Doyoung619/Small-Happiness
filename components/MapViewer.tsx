@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/refs */
+
 import { useCallback, useRef, useState, useEffect } from "react";
 import { GoogleMap, useJsApiLoader, OverlayView, DirectionsRenderer } from "@react-google-maps/api";
 import BubblePin from "./BubblePin";
@@ -27,7 +29,7 @@ const containerStyle = {
   height: "100%",
 };
 
-// GenZ Dark Mode Map Style
+// Light mode map style (day theme)
 const mapOptions = {
   disableDefaultUI: true,
   zoomControl: false,
@@ -37,24 +39,32 @@ const mapOptions = {
   clickableIcons: false,
   gestureHandling: "greedy" as const,
   styles: [
-    { elementType: "geometry", stylers: [{ color: "#1a1b26" }] },
-    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
-    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
-    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
-    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
-    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
-    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
-    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
-    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
-    { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
-    { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
-    { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
-    { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
-    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
-    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
-    { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] },
+    { elementType: "geometry", stylers: [{ color: "#f5f6f9" }] },
+    { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#4b5563" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+    { featureType: "administrative.country", elementType: "geometry.stroke", stylers: [{ color: "#d1d5db" }] },
+    { featureType: "administrative.country", elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+    { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#9ca3af" }] },
+    { featureType: "administrative.neighborhood", elementType: "labels.text.fill", stylers: [{ color: "#9ca3af" }] },
+    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+    { featureType: "poi", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
+    { featureType: "poi.business", elementType: "labels", stylers: [{ visibility: "off" }] },
+    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dde7d8" }] },
+    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6d8f65" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#f1f3f7" }] },
+    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#d5d9e0" }] },
+    { featureType: "road", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+    { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+    { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d4d8df" }] },
+    { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#4b5563" }] },
+    { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+    { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#cfd4da" }] },
+    { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#9ca3af" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#dbe9f4" }] },
+    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4b5563" }] },
+    { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
   ],
 };
 
@@ -120,9 +130,24 @@ export default function MapViewer({
 
   const clusters = clusterPins(pins, currentZoom);
 
+  const zoomChanged = useCallback(() => {
+    setCurrentZoom(mapRef.current?.getZoom() ?? zoom);
+  }, [zoom]);
+
+  const openCluster = useCallback((cluster: { lat: number; lng: number; pins: Pin[] }) => {
+    mapRef.current?.panTo({ lat: cluster.lat, lng: cluster.lng });
+    mapRef.current?.setZoom(Math.min(currentZoom + 2, 20));
+    onClusterOpen?.(cluster.pins);
+  }, [currentZoom, onClusterOpen]);
+
+  const openPin = useCallback((pin: Pin) => {
+    onPinClick?.(pin);
+    mapRef.current?.panTo({ lat: pin.lat, lng: pin.lng });
+  }, [onPinClick]);
+
   if (!isLoaded) {
     return (
-      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#1a1b26", color: "rgba(255,255,255,0.5)" }}>
+      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f3f4f6", color: "rgba(17,24,39,0.62)" }}>
         Loading Map...
       </div>
     );
@@ -136,7 +161,7 @@ export default function MapViewer({
       onLoad={onLoad}
       onUnmount={onUnmount}
       onClick={onMapClick}
-      onZoomChanged={() => setCurrentZoom(mapRef.current?.getZoom() ?? zoom)}
+      onZoomChanged={zoomChanged}
       options={mapOptions}
     >
       {clusters.map((cluster) => (
@@ -151,9 +176,7 @@ export default function MapViewer({
               aria-label={`Zoom into ${cluster.pins.length} joys`}
               onClick={(event) => {
                 event.stopPropagation();
-                mapRef.current?.panTo({ lat: cluster.lat, lng: cluster.lng });
-                mapRef.current?.setZoom(Math.min(currentZoom + 2, 20));
-                onClusterOpen?.(cluster.pins);
+                openCluster(cluster);
               }}
               className="joy-cluster pressable"
             >
@@ -167,14 +190,13 @@ export default function MapViewer({
                 aria-label={pin.label ? `${pin.label} details` : "Joy details"}
                 onClick={(event) => {
                   event.stopPropagation();
-                  onPinClick?.(pin);
-                  mapRef.current?.panTo({ lat: pin.lat, lng: pin.lng });
+                  openPin(pin);
                 }}
                 className="pressable"
-                style={{ position: "absolute", transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer", pointerEvents: "auto", border: 0, padding: 0, background: "none", color: "inherit" }}
+                style={{ position: "absolute", transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer", pointerEvents: "auto", border: 0, padding: 0, background: "none", color: "#111827" }}
               >
                 <BubblePin emoji={pin.emoji} hue={pin.hue} selected={activePinId === pin.id} />
-                {pin.label && <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.8)", textShadow: "0 2px 4px rgba(0,0,0,0.8)", pointerEvents: "none", whiteSpace: "nowrap" }}>{pin.label}</span>}
+                {pin.label && <span style={{ fontSize: "11px", fontWeight: 600, color: "#111827", pointerEvents: "none", whiteSpace: "nowrap" }}>{pin.label}</span>}
               </button>
             );
           })()}
@@ -186,9 +208,9 @@ export default function MapViewer({
           directions={directions}
           options={{
             polylineOptions: {
-              strokeColor: "#f472b6", // Gen Z glowing pink
+              strokeColor: "#4f46e5",
               strokeWeight: 6,
-              strokeOpacity: 0.8,
+              strokeOpacity: 0.95,
             },
             suppressMarkers: false, // Keep default A/B markers for now, or we can suppress and use our BubblePins
           }}

@@ -13,7 +13,7 @@ interface JoyCardProps {
 const S = {
   sheet: {
     position: "fixed" as const,
-    bottom: 0,
+    bottom: "calc(var(--app-map-floating-offset) - var(--app-bottom-nav-gap))",
     left: 0,
     right: 0,
     zIndex: 50,

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { detectEmojis } from "@/lib/autoEmoji";
+import { JoyGroup, subscribeToGroups } from "@/lib/groups";
 import { createJoy } from "@/lib/joys";
 
 const MAX_CHARS = 100;
@@ -27,6 +28,8 @@ export default function AddJoyPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [groups, setGroups] = useState<JoyGroup[]>([]);
+  const [target, setTarget] = useState("public");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream>(null);
 
@@ -37,6 +40,11 @@ export default function AddJoyPage() {
   };
 
   useEffect(() => stopCamera, []);
+
+  useEffect(() => {
+    if (!user) return;
+    return subscribeToGroups(user.uid, setGroups, setError);
+  }, [user]);
 
   const choosePhoto = (file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
@@ -90,6 +98,7 @@ export default function AddJoyPage() {
     setError("");
     try {
       const position = await getLocation();
+      const group = groups.find((item) => item.id === target);
       await createJoy({
         uid: user.uid,
         text: text.trim(),
@@ -97,6 +106,9 @@ export default function AddJoyPage() {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
         photo,
+        author: user.displayName,
+        groupId: group?.id,
+        groupName: group?.name,
       });
       router.push("/");
     } catch (caught) {
@@ -142,14 +154,26 @@ export default function AddJoyPage() {
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, color: "rgba(255,255,255,.6)", fontSize: 13 }}>
           <span style={{ fontSize: 28 }}>{emoji}</span>
-          <span>Posted at your current location as guest-{user?.uid.slice(0, 6) || "…"}</span>
+          <span>Posted at your current location as {user?.displayName || `guest-${user?.uid.slice(0, 6) || "…"}`}</span>
         </div>
+
+        <label style={{ display: "flex", flexDirection: "column", gap: 8, color: "rgba(255,255,255,.65)", fontSize: 13 }}>
+          Visibility
+          <select
+            value={target}
+            onChange={(event) => setTarget(event.target.value)}
+            style={{ width: "100%", padding: "14px 16px", borderRadius: 16, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.14)", color: "#fff" }}
+          >
+            <option value="public">Public</option>
+            {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+          </select>
+        </label>
         {error && <p role="alert" style={{ color: "#f87171", fontSize: 13 }}>{error}</p>}
       </div>
 
       <div style={{ padding: 20 }}>
         <button onClick={submit} disabled={loading || !user || !text.trim() || saving} className="btn-joy" style={{ width: "100%", height: 56, opacity: loading || !text.trim() ? 0.5 : 1 }}>
-          {saving ? "Sharing…" : `${emoji} Share Publicly`}
+          {saving ? "Sharing…" : `${emoji} Share ${target === "public" ? "Publicly" : "to Group"}`}
         </button>
       </div>
     </div>

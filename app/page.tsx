@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import JoyCard from "@/components/JoyCard";
 import MapViewer from "@/components/MapViewer";
+import { JoyGroup, subscribeToGroups } from "@/lib/groups";
 import { Joy, subscribeToJoys } from "@/lib/joys";
 import { buildMockInteractions, Persona, PERSONAS } from "@/lib/mockInteractions";
 import { rankJoySpots, toJoySpot } from "@/lib/recommendation";
@@ -20,14 +21,18 @@ function coordinate(lat: string | null, lng: string | null) {
 
 function MapPageContent() {
   const searchParams = useSearchParams();
-  const { user, loading: authLoading } = useAuth();
+  const pathname = usePathname();
+  const { user } = useAuth();
   const [joys, setJoys] = useState<Joy[]>([]);
+  const [groups, setGroups] = useState<JoyGroup[]>([]);
   const [selectedJoy, setSelectedJoy] = useState<Joy | null>(null);
   const [clusterPins, setClusterPins] = useState<Joy[]>([]);
   const [clusterFocusedPinId, setClusterFocusedPinId] = useState<string | null>(null);
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [error, setError] = useState("");
   const [routeSummaryOpen, setRouteSummaryOpen] = useState(true);
+  const [locatePulse, setLocatePulse] = useState(false);
+  const locatePulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const originStr = searchParams.get("origin");
   const destStr = searchParams.get("dest");
@@ -62,33 +67,136 @@ function MapPageContent() {
   };
 
   const focusedPinId = selectedJoy?.id ?? clusterFocusedPinId;
+  const groupIds = useMemo(() => groups.map((group) => group.id), [groups]);
 
   useEffect(() => {
     if (!user) return;
-    return subscribeToJoys(setJoys, () => setError("Could not load joys yet."));
+    return subscribeToGroups(user.uid, setGroups, () => setError("Could not load groups yet."));
   }, [user]);
 
   useEffect(() => {
-    if (selectedJoy) {
-      setCenter({ lat: selectedJoy.lat, lng: selectedJoy.lng });
-    }
-  }, [selectedJoy?.id]);
+    if (!user) return;
+    return subscribeToJoys(setJoys, () => setError("Could not load joys yet."), groupIds);
+  }, [user, groupIds]);
 
   const locateMe = () => {
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => setCenter({ lat: coords.latitude, lng: coords.longitude }),
+      ({ coords }) => {
+        setCenter({ lat: coords.latitude, lng: coords.longitude });
+        setLocatePulse(true);
+        if (locatePulseTimer.current) {
+          clearTimeout(locatePulseTimer.current);
+        }
+        locatePulseTimer.current = setTimeout(() => setLocatePulse(false), 900);
+      },
       () => setError("Location permission is needed to find you."),
       { enableHighAccuracy: true, timeout: 10000 },
     );
   };
+
+  useEffect(() => {
+    return () => {
+      if (locatePulseTimer.current) {
+        clearTimeout(locatePulseTimer.current);
+      }
+    };
+  }, []);
 
   const closeCluster = () => {
     setClusterPins([]);
     setClusterFocusedPinId(null);
   };
 
-  return (
+    return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "var(--bg-base)", overflow: "hidden" }}>
+      {pathname === "/" && (
+        <div
+          style={{
+            position: "fixed",
+            top: "calc(env(safe-area-inset-top) + 12px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 60,
+            width: "min(720px, calc(100% - 24px))",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            pointerEvents: "auto",
+          }}
+        >
+          <Link
+            href="/search"
+            aria-label="Search joy routes"
+            className="pressable"
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "13px 16px",
+              borderRadius: 16,
+              color: "#fff",
+              background: "rgba(13, 12, 20, 0.88)",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              backdropFilter: "blur(18px)",
+              textDecoration: "none",
+              fontSize: 14,
+              fontFamily: "var(--font-display)",
+              fontWeight: 700,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
+              <span style={{ fontSize: 17 }}>🔍</span> Search joy routes
+            </span>
+            <span style={{ fontSize: 12, opacity: 0.55 }}>Tap</span>
+          </Link>
+
+          <Link
+            href="/explore"
+            aria-label="탐색"
+            className="pressable"
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 999,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(139, 92, 246, 0.25)",
+              border: "1px solid rgba(255,255,255,.22)",
+              color: "#fff",
+              textDecoration: "none",
+              gap: 0,
+              boxShadow: "0 10px 24px rgba(0,0,0,.28)",
+            }}
+          >
+            <span style={{ fontSize: 22, flexShrink: 0 }}>🗺️</span>
+          </Link>
+
+          <Link
+            href="/menu"
+            aria-label="메뉴"
+            className="pressable"
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 999,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(13, 12, 20, 0.8)",
+              border: "1px solid rgba(255,255,255,.12)",
+              color: "rgba(255, 255, 255, 0.6)",
+              textDecoration: "none",
+              gap: 0,
+            }}
+          >
+            <span style={{ fontSize: 22, flexShrink: 0 }}>⋮</span>
+          </Link>
+        </div>
+      )}
+
       <div style={{ position: "absolute", inset: 0 }}>
         <MapViewer
           pins={displayJoys}
@@ -102,6 +210,7 @@ function MapPageContent() {
             setSelectedJoy(pin as Joy);
             setClusterPins([]);
             setClusterFocusedPinId(pin.id);
+            setCenter({ lat: pin.lat, lng: pin.lng });
             setRouteSummaryOpen(false);
           }}
           onClusterOpen={(pins) => {
@@ -125,14 +234,14 @@ function MapPageContent() {
             position: "fixed",
             left: 0,
             right: 0,
-            bottom: 20,
+            bottom: "calc(var(--app-map-floating-offset))",
             margin: "0 auto",
             width: "min(600px, calc(100% - 32px))",
             borderRadius: 22,
             background: "rgba(18, 20, 27, 0.95)",
             border: "1px solid rgba(255,255,255,.14)",
             backdropFilter: "blur(20px)",
-            zIndex: 20,
+            zIndex: 60,
           }}
         >
           <div style={{ padding: "14px 16px", display: "flex", alignItems: "center" }}>
@@ -212,25 +321,67 @@ function MapPageContent() {
         </div>
       )}
 
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: 20, zIndex: 10, pointerEvents: "none" }}>
-            <Link href="/search" style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(18,20,27,.9)", backdropFilter: "blur(20px)", padding: "16px 20px", borderRadius: 20, border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 8px 24px rgba(0,0,0,.4)", textDecoration: "none", color: "rgba(255,255,255,.5)", pointerEvents: "auto" }}>
-          <span>🔍</span>
-          <span style={{ fontSize: 15, fontWeight: 500, color: originStr && destStr ? "#fff" : "inherit" }}>
-            {originStr && destStr ? `${originStr} → ${destStr}` : "Where do you want to go?"}
-          </span>
-        </Link>
-        {(authLoading || error || (!authLoading && joys.length === 0)) && (
-          <div style={{ marginTop: 10, padding: "8px 12px", width: "fit-content", borderRadius: 99, background: "rgba(13,12,20,.8)", color: "rgba(255,255,255,.65)", fontSize: 12 }}>
-            {authLoading ? "Creating your guest ID…" : error || "No joys here yet — add the first one!"}
-          </div>
-        )}
-      </div>
+      {error && (
+        <p role="alert" style={{ position: "fixed", left: 16, bottom: "calc(var(--app-map-floating-offset) + 132px)", zIndex: 70, maxWidth: "calc(100% - 32px)", padding: "10px 12px", borderRadius: 12, background: "rgba(127,29,29,.9)", color: "#fff", fontSize: 12 }}>
+          {error}
+        </p>
+      )}
 
-      <div style={{ position: "absolute", bottom: 100, left: 20, right: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-end", zIndex: 10, pointerEvents: "none" }}>
-        <button onClick={locateMe} aria-label="Use my location" className="pressable" style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(18,20,27,.9)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,.1)", color: "#fff", fontSize: 20, boxShadow: "0 8px 24px rgba(0,0,0,.35)", cursor: "pointer", pointerEvents: "auto" }}>
-          📍
+      <div
+        style={{
+          position: "fixed",
+          right: 18,
+          bottom: "calc(var(--app-map-floating-offset) - 14px)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          alignItems: "center",
+          zIndex: 50,
+          pointerEvents: "none",
+        }}
+      >
+        <button
+          onClick={locateMe}
+          aria-label="Show my location"
+          className={`pressable locate-fab ${locatePulse ? "locate-pulse" : ""}`}
+          type="button"
+          style={{
+            width: 54,
+            height: 54,
+            borderRadius: "50%",
+            background: "rgba(18,20,27,.92)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(255,255,255,.14)",
+            color: "#fff",
+            fontSize: 24,
+            boxShadow: "0 10px 30px rgba(0,0,0,.35)",
+            cursor: "pointer",
+            pointerEvents: "auto",
+            position: "relative",
+          }}
+        >
+          <span style={{ fontSize: 22 }}>📍</span>
         </button>
-        <Link href="/add" aria-label="Add joy" className="pressable" style={{ width: 64, height: 64, borderRadius: 32, background: "linear-gradient(135deg,rgba(123,110,255,.95),rgba(244,115,177,.95))", color: "#fff", fontSize: 28, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 12px 28px rgba(123,110,255,.45)", textDecoration: "none", pointerEvents: "auto" }}>
+
+        <Link
+          href="/add"
+          aria-label="Add bubble"
+          className="pressable"
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 32,
+            background: "linear-gradient(135deg,rgba(123,110,255,.95),rgba(244,115,177,.95))",
+            color: "#fff",
+            fontSize: 28,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 12px 28px rgba(123,110,255,.45)",
+            textDecoration: "none",
+            pointerEvents: "auto",
+          }}
+        >
           ✨
         </Link>
       </div>

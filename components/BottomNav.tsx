@@ -6,59 +6,74 @@ import { usePathname } from "next/navigation";
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // Do not show bottom nav on Add Joy page or Search page (full screen flows)
-  if (pathname === "/add" || pathname === "/search") return null;
+  // Keep map screen controls at top, and hide nav in full-feature pages
+  if (pathname === "/" || pathname === "/add" || pathname === "/search" || pathname === "/explore" || pathname === "/menu") return null;
 
   const tabs = [
-    { name: "Map", path: "/", icon: "📍" },
-    { name: "Explore", path: "/explore", icon: "✨" },
-    { name: "Menu", path: "/menu", icon: "☰" },
+    { name: "탐색", path: "/", icon: "🗺️" },
+    { name: "메뉴", path: "/menu", icon: "⋮" },
   ];
 
   return (
     <nav
       style={{
         position: "fixed",
-        bottom: 0,
+        bottom: "var(--app-bottom-nav-lift)",
         left: 0,
         right: 0,
-        height: "80px",
-        background: "rgba(13, 12, 20, 0.85)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+        height: "var(--app-bottom-nav-height)",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "space-around",
-        paddingBottom: "env(safe-area-inset-bottom)",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 6px)",
+        paddingTop: "12px",
+        pointerEvents: "none",
         zIndex: 40,
       }}
     >
-      {tabs.map((tab) => {
-        const isActive = pathname === tab.path;
-        return (
-          <Link
-            key={tab.name}
-            href={tab.path}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "4px",
-              textDecoration: "none",
-              color: isActive ? "#f472b6" : "rgba(255, 255, 255, 0.4)",
-              transition: "color 0.2s ease",
-            }}
-          >
-            <span style={{ fontSize: "24px", filter: isActive ? "drop-shadow(0 0 8px rgba(244,114,182,0.6))" : "none" }}>
-              {tab.icon}
-            </span>
-            <span style={{ fontSize: "11px", fontWeight: isActive ? 700 : 500, fontFamily: "var(--font-display)" }}>
-              {tab.name}
-            </span>
-          </Link>
-        );
-      })}
+      <div
+        style={{
+          width: "min(100%, 720px)",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "0 12px 12px",
+          pointerEvents: "auto",
+        }}
+      >
+        {tabs.map((tab) => {
+          const isActive = pathname === tab.path;
+          
+          return (
+            <Link
+              key={tab.name}
+              href={tab.path}
+              aria-label={tab.name}
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 999,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: isActive
+                  ? "rgba(139, 92, 246, 0.25)"
+                  : "rgba(13, 12, 20, 0.8)",
+                border: isActive
+                  ? "1px solid rgba(255,255,255,.22)"
+                  : "1px solid rgba(255,255,255,.12)",
+                color: isActive ? "#fff" : "rgba(255, 255, 255, 0.6)",
+                textDecoration: "none",
+                gap: 0,
+                boxShadow: isActive ? "0 10px 24px rgba(0,0,0,.28)" : "none",
+                transition: "all .2s ease",
+              }}
+            >
+              <span style={{ fontSize: 22, flexShrink: 0 }}>{tab.icon}</span>
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

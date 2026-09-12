@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Autocomplete, useJsApiLoader } from "@react-google-maps/api";
 import { useAuth } from "@/components/AuthProvider";
+import { JoyGroup, subscribeToGroups } from "@/lib/groups";
 import { Joy, subscribeToJoys } from "@/lib/joys";
 import { buildMockInteractions } from "@/lib/mockInteractions";
 import { rankJoySpots, toJoySpot } from "@/lib/recommendation";
@@ -77,6 +78,7 @@ export default function SearchPage() {
   const [activeSearch, setActiveSearch] = useState<"origin" | "dest" | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [joys, setJoys] = useState<Joy[]>([]);
+  const [groups, setGroups] = useState<JoyGroup[]>([]);
   const [routeCandidates, setRouteCandidates] = useState<RouteCandidate[]>([]);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [planning, setPlanning] = useState(false);
@@ -85,26 +87,31 @@ export default function SearchPage() {
 
   const { isLoaded } = useJsApiLoader({ id: "google-map-script", googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "", libraries });
   const previewRoute = routeCandidates[selectedRouteIndex];
+  const groupIds = useMemo(() => groups.map((group) => group.id), [groups]);
 
   useEffect(() => {
     if (!user) return;
-    return subscribeToJoys(setJoys, () => setError("Could not load Joy Spots."));
+    return subscribeToGroups(user.uid, setGroups, () => setError("Could not load Groups."));
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    return subscribeToJoys(setJoys, () => setError("Could not load Joy Spots."), groupIds);
+  }, [user, groupIds]);
 
   useEffect(() => {
     if (!isLoaded || !origin.location || !destination.location || joys.length < 2) {
       return;
     }
     let cancelled = false;
-    setRouteCandidates([]);
-    setPlanning(true);
-    setError("");
     const run = async () => {
+      setRouteCandidates([]);
+      setPlanning(true);
+      setError("");
       const nearby = filterPinsInBox(joys, getBoundingBox(origin.location!, destination.location!, 0.5));
       const candidates = nearby.length >= 2 ? nearby : joys;
       const interactions = buildMockInteractions(candidates.map(toJoySpot));
       const ranked = rankJoySpots("Doyoung", candidates, interactions);
-      const routeSets = new Map<string, RecommendedSpot[]>();
 
       const directDistanceSort = [...ranked].map((spot) => ({
         spot,
