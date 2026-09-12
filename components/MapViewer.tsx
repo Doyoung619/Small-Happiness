@@ -22,6 +22,8 @@ interface MapViewerProps {
   onMapClick?: () => void;
   activePinId?: string | null;
   onClusterOpen?: (pins: Pin[]) => void;
+  onCenterChanged?: (center: { lat: number; lng: number }) => void;
+  userLocation?: { lat: number; lng: number } | null;
 }
 
 const containerStyle = {
@@ -79,6 +81,8 @@ export default function MapViewer({
   onMapClick,
   activePinId = null,
   onClusterOpen,
+  onCenterChanged,
+  userLocation,
 }: MapViewerProps) {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -87,8 +91,11 @@ export default function MapViewer({
   });
 
   const mapRef = useRef<google.maps.Map | null>(null);
+  const burstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentZoom, setCurrentZoom] = useState(zoom);
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
+  const [burstingPinId, setBurstingPinId] = useState<string | null>(null);
+  const [mapMoving, setMapMoving] = useState(false);
 
   useEffect(() => {
     if (isLoaded && origin && destination) {
@@ -119,6 +126,7 @@ export default function MapViewer({
 
   const onUnmount = useCallback(function callback() {
     mapRef.current = null;
+    if (burstTimerRef.current) clearTimeout(burstTimerRef.current);
   }, []);
 
   useEffect(() => {
@@ -131,8 +139,15 @@ export default function MapViewer({
   const clusters = clusterPins(pins, currentZoom);
 
   const zoomChanged = useCallback(() => {
+    setMapMoving(true);
     setCurrentZoom(mapRef.current?.getZoom() ?? zoom);
   }, [zoom]);
+
+  const mapIdle = useCallback(() => {
+    setMapMoving(false);
+    const mapCenter = mapRef.current?.getCenter();
+    if (mapCenter) onCenterChanged?.({ lat: mapCenter.lat(), lng: mapCenter.lng() });
+  }, [onCenterChanged]);
 
   const openCluster = useCallback((cluster: { lat: number; lng: number; pins: Pin[] }) => {
     mapRef.current?.panTo({ lat: cluster.lat, lng: cluster.lng });
@@ -141,8 +156,15 @@ export default function MapViewer({
   }, [currentZoom, onClusterOpen]);
 
   const openPin = useCallback((pin: Pin) => {
-    onPinClick?.(pin);
-    mapRef.current?.panTo({ lat: pin.lat, lng: pin.lng });
+    if (burstTimerRef.current) clearTimeout(burstTimerRef.current);
+    const open = () => {
+      setBurstingPinId(null);
+      onPinClick?.(pin);
+      mapRef.current?.panTo({ lat: pin.lat, lng: pin.lng });
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return open();
+    setBurstingPinId(pin.id);
+    burstTimerRef.current = setTimeout(open, 220);
   }, [onPinClick]);
 
   if (!isLoaded) {
@@ -162,9 +184,17 @@ export default function MapViewer({
       onUnmount={onUnmount}
       onClick={onMapClick}
       onZoomChanged={zoomChanged}
+      onDragStart={() => setMapMoving(true)}
+      onIdle={mapIdle}
       options={mapOptions}
     >
-      {clusters.map((cluster) => (
+      {userLocation && (
+        <OverlayView position={userLocation} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
+          <div className="user-location-marker" role="img" aria-label="Your location"><span /></div>
+        </OverlayView>
+      )}
+
+      {clusters.map((cluster, index) => (
         <OverlayView
           key={cluster.id}
           position={{ lat: cluster.lat, lng: cluster.lng }}
@@ -192,10 +222,10 @@ export default function MapViewer({
                   event.stopPropagation();
                   openPin(pin);
                 }}
-                className="pressable"
+                className="map-bubble-button"
                 style={{ position: "absolute", transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer", pointerEvents: "auto", border: 0, padding: 0, background: "none", color: "#111827" }}
               >
-                <BubblePin emoji={pin.emoji} hue={pin.hue} selected={activePinId === pin.id} />
+                <BubblePin emoji={pin.emoji} hue={pin.hue} selected={activePinId === pin.id} bursting={burstingPinId === pin.id} floatDelay={-(index % 7) * 0.35} floatPaused={mapMoving} />
                 {pin.label && <span style={{ fontSize: "11px", fontWeight: 600, color: "#111827", pointerEvents: "none", whiteSpace: "nowrap" }}>{pin.label}</span>}
               </button>
             );

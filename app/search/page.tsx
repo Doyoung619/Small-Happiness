@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Autocomplete, useJsApiLoader } from "@react-google-maps/api";
 import { useAuth } from "@/components/AuthProvider";
-import { JoyGroup, subscribeToGroups } from "@/lib/groups";
+import { subscribeToProfile, UserProfile } from "@/lib/friends";
 import { Joy, subscribeToJoys } from "@/lib/joys";
 import { buildMockInteractions } from "@/lib/mockInteractions";
 import { rankJoySpots, toJoySpot } from "@/lib/recommendation";
@@ -78,26 +78,25 @@ export default function SearchPage() {
   const [activeSearch, setActiveSearch] = useState<"origin" | "dest" | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [joys, setJoys] = useState<Joy[]>([]);
-  const [groups, setGroups] = useState<JoyGroup[]>([]);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [routeCandidates, setRouteCandidates] = useState<RouteCandidate[]>([]);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const { isLoaded } = useJsApiLoader({ id: "google-map-script", googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "", libraries });
   const previewRoute = routeCandidates[selectedRouteIndex];
-  const groupIds = useMemo(() => groups.map((group) => group.id), [groups]);
-
   useEffect(() => {
     if (!user) return;
-    return subscribeToGroups(user.uid, setGroups, () => setError("Could not load Groups."));
+    return subscribeToProfile(user.uid, setProfile, () => setError("Could not load Profile."));
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    return subscribeToJoys(setJoys, () => setError("Could not load Joy Spots."), groupIds);
-  }, [user, groupIds]);
+    return subscribeToJoys(setJoys, () => setError("Could not load Joy Spots."), profile?.language);
+  }, [user, profile?.language]);
 
   useEffect(() => {
     if (!isLoaded || !origin.location || !destination.location || joys.length < 2) {
@@ -151,7 +150,7 @@ export default function SearchPage() {
 
       if (!cancelled) {
         setRouteCandidates(planned);
-        setSelectedRouteIndex(0);
+        setSelectedRouteIndex((index) => Math.min(index, Math.max(0, planned.length - 1)));
       }
     };
 
@@ -167,6 +166,7 @@ export default function SearchPage() {
 
   const choosePlace = (place: PlaceChoice) => {
     setRouteCandidates([]);
+    setSelectedRouteIndex(0);
     if (activeSearch === "origin") setOrigin(place);
     if (activeSearch === "dest") setDestination(place);
     setActiveSearch(null);
@@ -206,9 +206,17 @@ export default function SearchPage() {
     return `/?${params}`;
   };
 
+  const selectRoute = (index: number) => {
+    const scrollTop = scrollRef.current?.scrollTop;
+    setSelectedRouteIndex(index);
+    requestAnimationFrame(() => {
+      if (scrollRef.current && scrollTop !== undefined) scrollRef.current.scrollTop = scrollTop;
+    });
+  };
+
   return (
-    <div className="scroll-page" style={{ minHeight: "100vh", background: "var(--bg-base)", color: "#fff" }}>
-      <main style={{ display: activeSearch ? "none" : "block", width: "min(680px, 100%)", margin: "0 auto", paddingBottom: 56 }}>
+    <div ref={scrollRef} className="scroll-page" style={{ minHeight: "100vh", background: "var(--bg-base)", color: "#fff" }}>
+      <main style={{ display: activeSearch ? "none" : "block", width: "min(680px, 100%)", margin: "0 auto", paddingBottom: "calc(env(safe-area-inset-bottom) + 140px)" }}>
         <header style={{ display: "flex", alignItems: "center", gap: 12, padding: 20 }}>
           <button onClick={() => router.back()} aria-label="Back" className="pressable" style={roundButton}>←</button>
           <strong style={{ fontFamily: "var(--font-display)" }}>Find Joy Route</strong>
@@ -224,6 +232,7 @@ export default function SearchPage() {
               aria-label="Swap locations"
               onClick={() => {
                 setRouteCandidates([]);
+                setSelectedRouteIndex(0);
                 setOrigin(destination);
                 setDestination(origin);
               }}
@@ -262,7 +271,7 @@ export default function SearchPage() {
                     key={route.id}
                     className="pressable"
                     role="button"
-                    onClick={() => setSelectedRouteIndex(index)}
+                    onClick={() => selectRoute(index)}
                     style={{
                       width: "100%",
                       padding: 18,

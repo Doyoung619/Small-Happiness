@@ -6,12 +6,15 @@ interface BubblePinProps {
   emoji: string;
   hue?: number;
   selected?: boolean;
+  bursting?: boolean;
+  floatDelay?: number;
+  floatPaused?: boolean;
 }
 
-export default function BubblePin({ emoji, hue = 223, selected = false }: BubblePinProps) {
+export default function BubblePin({ emoji, hue = 223, selected = false, bursting = false, floatDelay = 0, floatPaused = false }: BubblePinProps) {
   return (
-    <div className="joy-bubble-container" style={{ "--hue": hue } as CSSProperties}>
-      <div className={`joy-bubble ${selected ? "joy-bubble--active" : ""}`}>
+    <div className={`joy-bubble-container ${bursting ? "joy-bubble-container--bursting" : ""} ${floatPaused ? "joy-bubble-container--paused" : ""}`} style={{ "--hue": hue, "--float-delay": `${floatDelay}s` } as CSSProperties}>
+      <div className={`joy-bubble ${selected ? "joy-bubble--active" : ""} ${bursting ? "joy-bubble--bursting" : ""}`}>
         <div className="joy-bubble-emoji">{emoji}</div>
       </div>
 
@@ -21,6 +24,8 @@ export default function BubblePin({ emoji, hue = 223, selected = false }: Bubble
           width: 56px;
           height: 56px;
           filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+          animation: bubbleFloat 3.2s ease-in-out var(--float-delay) infinite alternate;
+          will-change: transform;
         }
 
         .joy-bubble {
@@ -72,6 +77,49 @@ export default function BubblePin({ emoji, hue = 223, selected = false }: Bubble
             0 0 18px 4px hsla(var(--hue), 95%, 80%, 0.95),
             0 0 0 4px rgba(248, 250, 252, 0.5);
           transform: scale(1.08);
+        }
+
+        .joy-bubble--bursting {
+          animation: bubbleBurst 220ms cubic-bezier(.2,.8,.2,1) forwards;
+        }
+
+        .joy-bubble-container--paused {
+          animation-play-state: paused;
+        }
+
+        .joy-bubble-container--bursting::before {
+          content: "";
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: hsl(var(--hue), 90%, 70%);
+          box-shadow: 22px 0 #fff, -22px 0 #fff, 0 22px #fff, 0 -22px #fff, 16px 16px hsl(var(--hue), 90%, 70%), -16px -16px hsl(var(--hue), 90%, 70%);
+          transform: translate(-50%, -50%) scale(.2);
+          animation: bubbleParticles 220ms ease-out forwards;
+          pointer-events: none;
+        }
+
+        @keyframes bubbleFloat {
+          from { transform: translateY(-2px); }
+          to { transform: translateY(2px); }
+        }
+
+        @keyframes bubbleBurst {
+          0% { transform: scale(1); opacity: 1; }
+          45% { transform: scale(1.18); opacity: 1; }
+          100% { transform: scale(.15); opacity: 0; }
+        }
+
+        @keyframes bubbleParticles {
+          from { transform: translate(-50%, -50%) scale(.2); opacity: 1; }
+          to { transform: translate(-50%, -50%) scale(1.25); opacity: 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .joy-bubble-container, .joy-bubble--bursting, .joy-bubble-container--bursting::before { animation: none; }
         }
 
       `}} />

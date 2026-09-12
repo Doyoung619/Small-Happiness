@@ -13,6 +13,7 @@ import {
 } from "firebase/auth";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { auth } from "@/lib/firebase";
+import { ensureUserProfile } from "@/lib/friends";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signingIn.current = false;
         setUser(nextUser);
         setLoading(false);
+        void ensureUserProfile(nextUser);
       } else if (!signingIn.current) {
         signingIn.current = true;
         signInAnonymously(auth).catch(() => {
@@ -53,13 +55,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = async () => {
     if (auth.currentUser?.isAnonymous) {
       try {
-        await linkWithPopup(auth.currentUser, googleProvider);
+        const credential = await linkWithPopup(auth.currentUser, googleProvider);
+        await ensureUserProfile(credential.user);
         return;
-      } catch {
-        // If this Google account already exists, just switch to it.
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code !== "auth/credential-already-in-use" && code !== "auth/email-already-in-use") {
+          throw error;
+        }
       }
     }
-    await signInWithPopup(auth, googleProvider);
+    const credential = await signInWithPopup(auth, googleProvider);
+    await ensureUserProfile(credential.user);
   };
 
   const changeName = async (name: string) => {

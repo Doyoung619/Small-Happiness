@@ -3,21 +3,27 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { createGroup, joinGroupByCode, JoyGroup, subscribeToGroups } from "@/lib/groups";
+import { LANGUAGES } from "@/lib/languages";
+import { acceptFriendRequest, declineFriendRequest, FriendRequest, saveUserLanguage, saveUserName, sendFriendRequest, subscribeToFriendRequests, subscribeToProfile, UserProfile } from "@/lib/friends";
 
 export default function MenuPage() {
   const router = useRouter();
-  const { user, loading, signInWithGoogle, changeName } = useAuth();
+  const { user, loading, signInWithGoogle } = useAuth();
   const [name, setName] = useState("");
-  const [newGroupName, setNewGroupName] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
-  const [groups, setGroups] = useState<JoyGroup[]>([]);
+  const [friendName, setFriendName] = useState("");
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     if (!user) return;
-    return subscribeToGroups(user.uid, setGroups, setMessage);
+    return subscribeToProfile(user.uid, setProfile, setMessage);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    return subscribeToFriendRequests(user.uid, setRequests, setMessage);
   }, [user]);
 
   const saveName = async () => {
@@ -25,7 +31,8 @@ export default function MenuPage() {
     setBusy(true);
     setMessage("");
     try {
-      await changeName(name);
+      if (!user) return;
+      await saveUserName(user, name);
       setMessage("Name saved.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save name.");
@@ -34,29 +41,42 @@ export default function MenuPage() {
     }
   };
 
-  const addGroup = async () => {
-    if (!user || !newGroupName.trim()) return;
+  const addFriend = async () => {
+    if (!user || !friendName.trim()) return;
     setBusy(true);
     setMessage("");
     try {
-      await createGroup(user.uid, newGroupName, user.displayName || name);
-      setNewGroupName("");
+      await sendFriendRequest(user, friendName);
+      setFriendName("");
+      setMessage("Friend request sent.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not create group.");
+      setMessage(error instanceof Error ? error.message : "Could not send friend request.");
     } finally {
       setBusy(false);
     }
   };
 
-  const joinGroup = async () => {
-    if (!user || !inviteCode.trim()) return;
+  const acceptRequest = async (request: FriendRequest) => {
+    if (!user) return;
+      setBusy(true);
+      setMessage("");
+      try {
+      await acceptFriendRequest(request);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not accept request.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loginWithGoogle = async () => {
     setBusy(true);
     setMessage("");
     try {
-      await joinGroupByCode(user.uid, inviteCode, user.displayName || name);
-      setInviteCode("");
+      await signInWithGoogle();
+      setMessage("Google login connected.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not join group.");
+      setMessage(error instanceof Error ? error.message : "Could not login with Google.");
     } finally {
       setBusy(false);
     }
@@ -94,7 +114,7 @@ export default function MenuPage() {
         </div>
         <div style={{ minWidth: 0 }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "20px", color: "#fff" }}>
-            {loading ? "Connecting…" : user?.displayName || "Guest Walker"}
+            {loading ? "Connecting…" : profile?.displayName || user?.displayName || "Guest Walker"}
           </h2>
           <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "13px", marginTop: "2px" }}>
             {user?.isAnonymous ? "Anonymous" : user?.email || "ID"}: {user?.uid.slice(0, 8) || "creating…"}
@@ -105,37 +125,60 @@ export default function MenuPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
         <section style={sectionStyle}>
           <h3 style={sectionTitle}>Account</h3>
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder={user?.displayName || (user ? `guest-${user.uid.slice(0, 6)}` : "Display name")} style={inputStyle} />
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder={profile?.displayName || user?.displayName || (user ? `guest-${user.uid.slice(0, 6)}` : "Display name")} style={inputStyle} />
+          <label style={{ display: "flex", flexDirection: "column", gap: 8, color: "rgba(255,255,255,.55)", fontSize: 13 }}>
+            Language
+            <select
+              value={profile?.language || "en"}
+              onChange={async (event) => {
+                setBusy(true);
+                setMessage("");
+                try {
+                  setProfile(await saveUserLanguage(event.target.value));
+                  setMessage("Language saved.");
+                } catch (error) {
+                  setMessage(error instanceof Error ? error.message : "Could not save language.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              style={inputStyle}
+            >
+              {LANGUAGES.map((language) => <option key={language.code} value={language.code}>{language.label}</option>)}
+            </select>
+          </label>
           <div style={{ display: "flex", gap: 10 }}>
             <button type="button" onClick={saveName} disabled={busy || !name.trim()} className="btn-joy" style={{ flex: 1 }}>Save Name</button>
-            <button type="button" onClick={signInWithGoogle} disabled={busy} className="pressable" style={secondaryButton}>Google Login</button>
+            <button type="button" onClick={loginWithGoogle} disabled={busy} className="pressable" style={secondaryButton}>Google Login</button>
           </div>
         </section>
 
         <section style={sectionStyle}>
-          <h3 style={sectionTitle}>Friend Groups</h3>
+          <h3 style={sectionTitle}>Friends</h3>
           <div style={{ display: "flex", gap: 10 }}>
-            <input value={newGroupName} onChange={(event) => setNewGroupName(event.target.value)} placeholder="New group name" style={inputStyle} />
-            <button type="button" onClick={addGroup} disabled={busy || !newGroupName.trim()} className="pressable" style={squareButton}>+</button>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <input value={inviteCode} onChange={(event) => setInviteCode(event.target.value.toUpperCase())} placeholder="Invite code" style={inputStyle} />
-            <button type="button" onClick={joinGroup} disabled={busy || !inviteCode.trim()} className="pressable" style={secondaryButton}>Join</button>
+            <input value={friendName} onChange={(event) => setFriendName(event.target.value)} placeholder="Friend name" style={inputStyle} />
+            <button type="button" onClick={addFriend} disabled={busy || !friendName.trim()} className="pressable" style={secondaryButton}>Add</button>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {groups.map((group) => (
-              <div key={group.id} style={{ padding: 14, borderRadius: 16, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)" }}>
+            {requests.map((request) => (
+              <div key={request.id} style={{ padding: 14, borderRadius: 16, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <strong>{group.name}</strong>
-                  <code style={{ color: "#a3e635" }}>{group.inviteCode}</code>
+                  <strong>{request.fromName}</strong>
+                  <span style={{ color: "#a3e635", fontSize: 12 }}>Request</span>
                 </div>
-                <p style={{ marginTop: 8, color: "rgba(255,255,255,.48)", fontSize: 12 }}>
-                  {(group.memberIds || []).map((id) => group.memberNames?.[id] || `guest-${id.slice(0, 6)}`).join(", ")}
-                </p>
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button type="button" onClick={() => acceptRequest(request)} disabled={busy} className="pressable" style={secondaryButton}>Accept</button>
+                  <button type="button" onClick={() => declineFriendRequest(request.id)} disabled={busy} className="pressable" style={secondaryButton}>Decline</button>
+                </div>
               </div>
             ))}
-            {!groups.length && <p style={{ color: "rgba(255,255,255,.45)", fontSize: 13 }}>No groups yet.</p>}
+            {(profile?.friendIds || []).map((id) => (
+              <div key={id} style={{ padding: 14, borderRadius: 16, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)" }}>
+                <strong>{profile?.friendNames?.[id] || `guest-${id.slice(0, 6)}`}</strong>
+              </div>
+            ))}
+            {!requests.length && !(profile?.friendIds || []).length && <p style={{ color: "rgba(255,255,255,.45)", fontSize: 13 }}>No friends yet.</p>}
           </div>
         </section>
 
@@ -179,13 +222,4 @@ const secondaryButton = {
   background: "rgba(255,255,255,.08)",
   color: "#fff",
   fontWeight: 700,
-};
-
-const squareButton = {
-  width: 48,
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,.14)",
-  background: "rgba(255,255,255,.08)",
-  color: "#fff",
-  fontSize: 24,
 };

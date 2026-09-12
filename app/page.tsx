@@ -6,10 +6,11 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import JoyCard from "@/components/JoyCard";
 import MapViewer from "@/components/MapViewer";
-import { JoyGroup, subscribeToGroups } from "@/lib/groups";
+import { subscribeToProfile, UserProfile } from "@/lib/friends";
 import { Joy, subscribeToJoys } from "@/lib/joys";
 import { buildMockInteractions, Persona, PERSONAS } from "@/lib/mockInteractions";
 import { rankJoySpots, toJoySpot } from "@/lib/recommendation";
+import { tagLabel } from "@/lib/tags";
 
 const DEFAULT_CENTER = { lat: 40.4433, lng: -79.9436 };
 
@@ -19,16 +20,27 @@ function coordinate(lat: string | null, lng: string | null) {
   return Number.isFinite(point.lat) && Number.isFinite(point.lng) ? point : null;
 }
 
+function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const radians = (value: number) => value * Math.PI / 180;
+  const dLat = radians(b.lat - a.lat);
+  const dLng = radians(b.lng - a.lng);
+  const value = Math.sin(dLat / 2) ** 2 + Math.cos(radians(a.lat)) * Math.cos(radians(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 12_742 * Math.asin(Math.sqrt(value));
+}
+
 function MapPageContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { user } = useAuth();
   const [joys, setJoys] = useState<Joy[]>([]);
-  const [groups, setGroups] = useState<JoyGroup[]>([]);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [mapFilter, setMapFilter] = useState<"all" | "public" | "friends">("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedJoy, setSelectedJoy] = useState<Joy | null>(null);
   const [clusterPins, setClusterPins] = useState<Joy[]>([]);
   const [clusterFocusedPinId, setClusterFocusedPinId] = useState<string | null>(null);
   const [center, setCenter] = useState(DEFAULT_CENTER);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [error, setError] = useState("");
   const [routeSummaryOpen, setRouteSummaryOpen] = useState(true);
   const [locatePulse, setLocatePulse] = useState(false);
@@ -41,11 +53,32 @@ function MapPageContent() {
   const personaParam = searchParams.get("persona");
   const persona: Persona = personaParam && personaParam in PERSONAS ? (personaParam as Persona) : "Doyoung";
 
+  const friendIds = useMemo(() => profile?.friendIds || [], [profile]);
+  const scopeJoys = useMemo(() => {
+    if (mapFilter === "public") return joys.filter((joy) => joy.visibility === "public");
+    if (mapFilter === "friends") return joys.filter((joy) => friendIds.includes(joy.authorId));
+    return joys;
+  }, [friendIds, joys, mapFilter]);
+
+  const nearbyTagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const location = userLocation || DEFAULT_CENTER;
+    scopeJoys.filter((joy) => distanceKm(location, joy) <= 5).forEach((joy) => {
+      joy.tags?.forEach((tag) => counts.set(tag, (counts.get(tag) || 0) + 1));
+    });
+    return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  }, [scopeJoys, userLocation]);
+
+  const visibleJoys = useMemo(() => selectedTags.length
+    ? scopeJoys.filter((joy) => joy.tags?.some((tag) => selectedTags.includes(tag)))
+    : scopeJoys,
+  [scopeJoys, selectedTags]);
+
   const displayJoys = useMemo(() => {
-    if (!routeIds.length) return joys;
-    const interactions = buildMockInteractions(joys.map(toJoySpot));
-    return rankJoySpots(persona, joys, interactions);
-  }, [joys, persona, routeIds.length]);
+    if (!routeIds.length) return visibleJoys;
+    const interactions = buildMockInteractions(visibleJoys.map(toJoySpot));
+    return rankJoySpots(persona, visibleJoys, interactions);
+  }, [visibleJoys, persona, routeIds.length]);
 
   const routeWaypoints = useMemo(
     () => routeIds.map((id) => displayJoys.find((joy) => joy.id === id)).filter((joy): joy is NonNullable<typeof joy> => !!joy),
@@ -67,22 +100,32 @@ function MapPageContent() {
   };
 
   const focusedPinId = selectedJoy?.id ?? clusterFocusedPinId;
-  const groupIds = useMemo(() => groups.map((group) => group.id), [groups]);
 
   useEffect(() => {
     if (!user) return;
-    return subscribeToGroups(user.uid, setGroups, () => setError("Could not load groups yet."));
+    return subscribeToProfile(user.uid, setProfile, () => setError("Could not load profile yet."));
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    return subscribeToJoys(setJoys, () => setError("Could not load joys yet."), groupIds);
-  }, [user, groupIds]);
+    return subscribeToJoys(setJoys, () => setError("Could not load joys yet."), profile?.language);
+  }, [user, profile?.language]);
+
+  useEffect(() => {
+    const watchId = navigator.geolocation.watchPosition(
+      ({ coords }) => setUserLocation({ lat: coords.latitude, lng: coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 30_000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
 
   const locateMe = () => {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        setCenter({ lat: coords.latitude, lng: coords.longitude });
+        const location = { lat: coords.latitude, lng: coords.longitude };
+        setUserLocation(location);
+        setCenter(location);
         setLocatePulse(true);
         if (locatePulseTimer.current) {
           clearTimeout(locatePulseTimer.current);
@@ -107,6 +150,20 @@ function MapPageContent() {
     setClusterFocusedPinId(null);
   };
 
+  const showClusterPin = (offset: number) => {
+    if (!clusterPins.length) return;
+    const index = clusterPins.findIndex((pin) => pin.id === selectedJoy?.id);
+    const pin = clusterPins[(index + offset + clusterPins.length) % clusterPins.length];
+    setSelectedJoy(pin);
+    setClusterFocusedPinId(pin.id);
+    setCenter({ lat: pin.lat, lng: pin.lng });
+  };
+
+  const nextMapFilter = () => {
+    setSelectedTags([]);
+    setMapFilter((filter) => filter === "all" ? "public" : filter === "public" ? "friends" : "all");
+  };
+
     return (
     <div style={{ position: "relative", width: "100%", height: "100vh", background: "var(--bg-base)", overflow: "hidden" }}>
       {pathname === "/" && (
@@ -121,6 +178,7 @@ function MapPageContent() {
             display: "flex",
             alignItems: "center",
             gap: 10,
+            flexWrap: "nowrap",
             pointerEvents: "auto",
           }}
         >
@@ -130,6 +188,8 @@ function MapPageContent() {
             className="pressable"
             style={{
               flex: 1,
+              minWidth: 0,
+              height: 52,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -144,17 +204,21 @@ function MapPageContent() {
               fontFamily: "var(--font-display)",
               fontWeight: 700,
               letterSpacing: "-0.01em",
+              overflow: "hidden",
             }}
           >
-            <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
-              <span style={{ fontSize: 17 }}>🔍</span> Search joy routes
+            <span style={{ display: "inline-flex", gap: 10, alignItems: "center", minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <span style={{ fontSize: 17, flexShrink: 0 }}>🔍</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>Search joy routes</span>
             </span>
-            <span style={{ fontSize: 12, opacity: 0.55 }}>Tap</span>
+            <span style={{ fontSize: 12, opacity: 0.55, marginLeft: 10, flexShrink: 0 }}>Tap</span>
           </Link>
 
-          <Link
-            href="/explore"
-            aria-label="탐색"
+          <button
+            type="button"
+            onClick={nextMapFilter}
+            aria-label={`Map filter: ${mapFilter}`}
+            title={`Map filter: ${mapFilter}`}
             className="pressable"
             style={{
               width: 52,
@@ -163,16 +227,17 @@ function MapPageContent() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "rgba(139, 92, 246, 0.25)",
-              border: "1px solid rgba(255,255,255,.22)",
+              background: "rgba(13, 12, 20, 0.8)",
+              border: "1px solid rgba(255,255,255,.12)",
               color: "#fff",
-              textDecoration: "none",
-              gap: 0,
               boxShadow: "0 10px 24px rgba(0,0,0,.28)",
+              flexShrink: 0,
             }}
           >
-            <span style={{ fontSize: 22, flexShrink: 0 }}>🗺️</span>
-          </Link>
+            <span style={{ width: 30, height: 30, borderRadius: "50%", display: "grid", placeItems: "center", background: mapFilter === "all" ? "rgba(139,92,246,.35)" : mapFilter === "public" ? "rgba(96,165,250,.28)" : "rgba(163,230,53,.22)", fontSize: 16, fontWeight: 900 }}>
+              {mapFilter === "all" ? "A" : mapFilter === "public" ? "P" : "F"}
+            </span>
+          </button>
 
           <Link
             href="/menu"
@@ -190,10 +255,20 @@ function MapPageContent() {
               color: "rgba(255, 255, 255, 0.6)",
               textDecoration: "none",
               gap: 0,
+              flexShrink: 0,
             }}
           >
-            <span style={{ fontSize: 22, flexShrink: 0 }}>⋮</span>
+            <span style={{ fontSize: 22, flexShrink: 0, lineHeight: 1 }}>☰</span>
           </Link>
+        </div>
+      )}
+
+      {pathname === "/" && nearbyTagCounts.length > 0 && (
+        <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 74px)", left: "50%", transform: "translateX(-50%)", zIndex: 59, width: "min(720px, calc(100% - 24px))", display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
+          {nearbyTagCounts.map(({ tag, count }) => {
+            const selected = selectedTags.includes(tag);
+            return <button key={tag} type="button" aria-pressed={selected} onClick={() => setSelectedTags((tags) => tags.includes(tag) ? tags.filter((item) => item !== tag) : [...tags, tag])} className="pressable" style={{ flexShrink: 0, padding: "8px 12px", borderRadius: 999, border: selected ? "1px solid rgba(255,255,255,.65)" : "1px solid rgba(255,255,255,.14)", background: selected ? "rgba(126,107,255,.92)" : "rgba(13,12,20,.82)", backdropFilter: "blur(16px)", color: "#fff", fontSize: 12, fontWeight: 700 }}>#{tagLabel(tag, profile?.language)} {count}</button>;
+          })}
         </div>
       )}
 
@@ -206,6 +281,7 @@ function MapPageContent() {
           destination={routeDestination}
           waypoints={routeWaypoints}
           activePinId={focusedPinId}
+          userLocation={userLocation}
           onPinClick={(pin) => {
             setSelectedJoy(pin as Joy);
             setClusterPins([]);
@@ -214,9 +290,13 @@ function MapPageContent() {
             setRouteSummaryOpen(false);
           }}
           onClusterOpen={(pins) => {
-            setSelectedJoy(null);
-            setClusterPins(pins as Joy[]);
-            setClusterFocusedPinId(null);
+            const cluster = pins as Joy[];
+            const first = cluster[0];
+            if (!first) return;
+            setClusterPins(cluster);
+            setSelectedJoy(first);
+            setClusterFocusedPinId(first.id);
+            setCenter({ lat: first.lat, lng: first.lng });
             setRouteSummaryOpen(false);
           }}
           onMapClick={() => {
@@ -227,98 +307,11 @@ function MapPageContent() {
         />
       </div>
 
-      {clusterPins.length > 0 && (
-        <div
-          className="cluster-overlay"
-          style={{
-            position: "fixed",
-            left: 0,
-            right: 0,
-            bottom: "calc(var(--app-map-floating-offset))",
-            margin: "0 auto",
-            width: "min(600px, calc(100% - 32px))",
-            borderRadius: 22,
-            background: "rgba(18, 20, 27, 0.95)",
-            border: "1px solid rgba(255,255,255,.14)",
-            backdropFilter: "blur(20px)",
-            zIndex: 60,
-          }}
-        >
-          <div style={{ padding: "14px 16px", display: "flex", alignItems: "center" }}>
-            <div
-              style={{
-                height: 4,
-                width: 42,
-                borderRadius: 999,
-                background: "rgba(255,255,255,.2)",
-                marginRight: "auto",
-              }}
-            />
-            <button
-              type="button"
-              onClick={closeCluster}
-              aria-label="Close cluster list"
-              className="pressable"
-              style={{
-                border: 0,
-                borderRadius: 999,
-                background: "rgba(255,255,255,.12)",
-                color: "#fff",
-                padding: "6px 12px",
-                fontSize: 12,
-              }}
-            >
-              Close
-            </button>
-          </div>
-          <div style={{ maxHeight: "44dvh", overflowY: "auto", padding: "0 16px 14px" }}>
-            <p style={{ color: "rgba(255,255,255,.6)", fontSize: 12, marginBottom: 8 }}>Bubble cluster</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {clusterPins.map((pin) => {
-                const isFocused = pin.id === clusterFocusedPinId;
-                return (
-                  <button
-                    key={pin.id}
-                    type="button"
-                    className="pressable"
-                    onClick={() => {
-                      setSelectedJoy(pin);
-                      setClusterFocusedPinId(pin.id);
-                      setCenter({ lat: pin.lat, lng: pin.lng });
-                    }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      textAlign: "left",
-                      borderRadius: 14,
-                      border: isFocused ? "1px solid rgba(168, 85, 247, 0.7)" : "1px solid rgba(255,255,255,.12)",
-                      padding: 12,
-                      background: isFocused ? "rgba(168, 85, 247, 0.16)" : "rgba(255,255,255,.04)",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 10,
-                        display: "grid",
-                        placeItems: "center",
-                        background: isFocused ? "rgba(168,85,247,.24)" : "rgba(255,255,255,.08)",
-                      }}
-                    >
-                      {pin.emoji}
-                    </span>
-                    <div>
-                      <p style={{ fontWeight: 700 }}>{pin.title}</p>
-                      <p style={{ color: "rgba(255,255,255,.55)", fontSize: 12, marginTop: 2 }}>{pin.description}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+      {clusterPins.length > 1 && selectedJoy && (
+        <>
+          <button type="button" aria-label="Previous bubble" onClick={() => showClusterPin(-1)} className="pressable" style={{ position: "fixed", left: "max(8px, calc(50% - 238px))", top: "50%", transform: "translateY(-50%)", zIndex: 1100, width: 44, height: 56, borderRadius: 999, border: "1px solid rgba(255,255,255,.2)", background: "rgba(13,12,20,.82)", color: "#fff", fontSize: 24 }}>‹</button>
+          <button type="button" aria-label="Next bubble" onClick={() => showClusterPin(1)} className="pressable" style={{ position: "fixed", right: "max(8px, calc(50% - 238px))", top: "50%", transform: "translateY(-50%)", zIndex: 1100, width: 44, height: 56, borderRadius: 999, border: "1px solid rgba(255,255,255,.2)", background: "rgba(13,12,20,.82)", color: "#fff", fontSize: 24 }}>›</button>
+        </>
       )}
 
       {error && (
@@ -390,7 +383,11 @@ function MapPageContent() {
         pin={selectedJoy}
         waypoints={routeSummaryOpen ? routeWaypoints : []}
         routeStats={routeStats.minutes ? routeStats : undefined}
-        onClose={() => (selectedJoy ? setSelectedJoy(null) : setRouteSummaryOpen(false))}
+        onClose={() => {
+          if (clusterPins.length) closeCluster();
+          if (selectedJoy) setSelectedJoy(null);
+          else setRouteSummaryOpen(false);
+        }}
       />
     </div>
   );

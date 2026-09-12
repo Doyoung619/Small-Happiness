@@ -12,7 +12,8 @@ export interface Pin {
   hue?: number;
   category?: JoyCategory;
   tags?: string[];
-  song?: { title: string; artist: string };
+  tagLabels?: Record<string, string>;
+  song?: { id: string; title: string; artist: string; album: string; artworkUrl: string; url: string };
   likeCount?: number;
   visitCount?: number;
   recommendation?: {

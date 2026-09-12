@@ -13,37 +13,45 @@ interface JoyCardProps {
 const S = {
   sheet: {
     position: "fixed" as const,
-    bottom: "calc(var(--app-map-floating-offset) - var(--app-bottom-nav-gap))",
-    left: 0,
-    right: 0,
-    zIndex: 50,
-    padding: "0 12px 12px",
+    inset: 0,
+    zIndex: 1000,
+    padding: 12,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    pointerEvents: "none" as const,
   },
   card: {
+    width: "min(380px, 100%)",
+    maxHeight: "calc(100dvh - 24px)",
     borderRadius: 24,
     background: "rgba(13, 12, 20, 0.94)",
     backdropFilter: "blur(28px) saturate(160%)",
     WebkitBackdropFilter: "blur(28px) saturate(160%)",
     border: "1px solid rgba(255,255,255,0.09)",
     boxShadow: "0 -8px 48px rgba(0,0,0,0.7)",
-    overflow: "hidden" as const,
+    overflowY: "auto" as const,
     position: "relative" as const,
+    pointerEvents: "auto" as const,
   },
   closeBtn: {
     position: "absolute" as const,
-    top: 14,
-    right: 14,
+    top: 12,
+    right: 12,
     zIndex: 10,
-    width: 30,
-    height: 30,
+    width: 42,
+    height: 42,
     borderRadius: "50%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "rgba(255,255,255,0.09)",
-    border: "none",
-    color: "rgba(255,255,255,0.45)",
-    fontSize: 13,
+    background: "rgba(0,0,0,0.48)",
+    border: "1px solid rgba(255,255,255,0.7)",
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: 900,
+    backdropFilter: "blur(6px)",
+    WebkitBackdropFilter: "blur(6px)",
     cursor: "pointer",
   },
 };
@@ -147,6 +155,24 @@ function PinPhotoCard({ pin }: { pin: Pin }) {
           {pin.description}
         </p>
 
+        {!!pin.tags?.length && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14 }}>
+            {pin.tags.map((tag) => <span key={tag} style={{ padding: "5px 9px", borderRadius: 999, background: "rgba(126,107,255,.14)", color: "#c4b5fd", fontSize: 11, fontWeight: 700 }}>#{pin.tagLabels?.[tag] || tag}</span>)}
+          </div>
+        )}
+
+        {pin.song && (
+          <a href={pin.song.url} target="_blank" rel="noreferrer" className="pressable" style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, padding: 10, borderRadius: 16, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.09)", color: "#fff", textDecoration: "none" }}>
+            <img src={pin.song.artworkUrl} alt="" style={{ width: 48, height: 48, borderRadius: 10, objectFit: "cover" }} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <strong style={{ display: "block", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", fontSize: 13 }}>{pin.song.title}</strong>
+              <span style={{ display: "block", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", color: "rgba(255,255,255,.5)", fontSize: 12 }}>{pin.song.artist} · {pin.song.album}</span>
+              <small style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>Courtesy of iTunes</small>
+            </div>
+            <span aria-hidden style={{ color: "rgba(255,255,255,.4)" }}>↗</span>
+          </a>
+        )}
+
         {pin.recommendation && (
           <div style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "rgba(139,92,246,.1)", border: "1px solid rgba(139,92,246,.2)" }}>
             <strong style={{ color: "#c4b5fd", fontSize: 13 }}>✨ {pin.recommendation.match}% match</strong>
@@ -246,7 +272,7 @@ export default function JoyCard({ pin, waypoints, onClose, routeStats }: JoyCard
   return (
     <div className="joy-card-shell sheet-enter" style={S.sheet}>
       <div style={S.card}>
-        <button onClick={onClose} style={S.closeBtn}>✕</button>
+        <button onClick={onClose} aria-label="Close bubble" style={S.closeBtn}>✕</button>
 
         {showingPin && pin && (
           <PinPhotoCard pin={pin} />

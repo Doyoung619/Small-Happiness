@@ -6,18 +6,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isGroupMember(groupId) {
+    function isFriendOfAuthor() {
       return signedIn()
-        && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        && (
+          resource.data.authorId == request.auth.uid
+          || request.auth.uid in get(/databases/$(database)/documents/profiles/$(resource.data.authorId)).data.friendIds
+        );
     }
 
     match /joys/{joyId} {
       allow read: if resource.data.visibility == "public"
-        || (resource.data.visibility == "group" && isGroupMember(resource.data.groupId));
+        || (resource.data.visibility == "friends" && isFriendOfAuthor());
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly([
           "authorId", "author", "title", "description", "emoji", "imageUrl",
-          "lat", "lng", "visibility", "groupId", "groupName", "createdAt", "sharedAt"
+          "lat", "lng", "visibility", "createdAt", "sharedAt"
         ])
         && request.resource.data.authorId == request.auth.uid
         && request.resource.data.author is string
@@ -39,39 +42,43 @@ service cloud.firestore {
         && request.resource.data.lng is number
         && request.resource.data.lng >= -180
         && request.resource.data.lng <= 180
-        && (
-          request.resource.data.visibility == "public"
-          || (request.resource.data.visibility == "group"
-            && request.resource.data.groupId is string
-            && request.resource.data.groupName is string
-            && request.resource.data.groupName.size() > 0
-            && request.resource.data.groupName.size() <= 80
-            && isGroupMember(request.resource.data.groupId))
-        )
+        && request.resource.data.visibility in ["public", "friends"]
         && request.resource.data.createdAt == request.time;
-      allow delete: if signedIn()
-        && resource.data.authorId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.authorId == request.auth.uid;
       allow update: if false;
     }
 
-    match /groups/{groupId} {
+    match /profiles/{uid} {
       allow read: if signedIn();
+      allow create: if signedIn() && uid == request.auth.uid;
+      allow update: if signedIn() && (
+        uid == request.auth.uid
+        || (
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(["friendIds", "friendNames"])
+          && request.auth.uid in request.resource.data.friendIds
+        )
+      );
+      allow delete: if false;
+    }
+
+    match /usernames/{name} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /friendRequests/{requestId} {
+      allow read: if signedIn() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid);
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(["name", "ownerId", "inviteCode", "memberIds", "memberNames", "createdAt"])
-        && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 80
-        && request.resource.data.inviteCode is string
-        && request.resource.data.inviteCode.size() == 6
-        && request.resource.data.memberIds is list
-        && request.resource.data.memberIds.size() == 1
-        && request.resource.data.memberIds[0] == request.auth.uid
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != request.auth.uid
+        && request.resource.data.status == "pending";
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["memberIds", "memberNames"])
-        && request.auth.uid in request.resource.data.memberIds;
-      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+        && resource.data.toUid == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "acceptedAt"])
+        && request.resource.data.status == "accepted";
+      allow delete: if signedIn() && resource.data.toUid == request.auth.uid;
     }
 
     match /{document=**} {
