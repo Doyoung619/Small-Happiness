@@ -40,13 +40,6 @@ export function filterPinsInBox(pins: Pin[], bbox: BoundingBox): Pin[] {
   );
 }
 
-/** Randomly select up to `count` pins from the filtered list */
-export function pickWaypoints(pins: Pin[], count = 2): Pin[] {
-  if (pins.length <= count) return [...pins];
-  const shuffled = [...pins].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
-}
-
 /** Build a Directions API request with waypoints */
 export function buildDirectionsRequest(
   origin: string,

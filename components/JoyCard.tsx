@@ -7,16 +7,16 @@ interface JoyCardProps {
   pin: Pin | null;
   waypoints: Pin[];
   onClose: () => void;
-  onShare: (pin: Pin) => void;
+  routeStats?: { minutes: number; detourMinutes: number; savedMinutes: number };
 }
 
 const S = {
   sheet: {
-    position: "absolute" as const,
+    position: "fixed" as const,
     bottom: 0,
     left: 0,
     right: 0,
-    zIndex: 20,
+    zIndex: 50,
     padding: "0 12px 12px",
   },
   card: {
@@ -48,7 +48,7 @@ const S = {
   },
 };
 
-function PinPhotoCard({ pin, onShare }: { pin: Pin; onShare: (p: Pin) => void }) {
+function PinPhotoCard({ pin }: { pin: Pin }) {
   const [imgError, setImgError] = useState(false);
 
   return (
@@ -58,7 +58,7 @@ function PinPhotoCard({ pin, onShare }: { pin: Pin; onShare: (p: Pin) => void })
         style={{
           position: "relative",
           width: "100%",
-          height: 200,
+          aspectRatio: "1 / 1",
           background: "rgba(255,255,255,0.04)",
           overflow: "hidden",
         }}
@@ -99,7 +99,8 @@ function PinPhotoCard({ pin, onShare }: { pin: Pin; onShare: (p: Pin) => void })
           style={{
             position: "absolute",
             top: 14,
-            right: 14,
+            left: 14,
+            maxWidth: "calc(100% - 72px)",
             display: "flex",
             alignItems: "center",
             gap: 5,
@@ -140,39 +141,26 @@ function PinPhotoCard({ pin, onShare }: { pin: Pin; onShare: (p: Pin) => void })
             color: "rgba(255,255,255,0.55)",
             fontSize: 14,
             lineHeight: 1.6,
-            marginBottom: 20,
+          marginBottom: 0,
           }}
         >
           {pin.description}
         </p>
 
-        <button
-          id={`share-btn-${pin.id}`}
-          onClick={() => onShare(pin)}
-          className="pressable"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 7,
-            padding: "10px 18px",
-            borderRadius: 99,
-            background: "rgba(244,114,182,0.12)",
-            border: "1.5px solid rgba(244,114,182,0.3)",
-            color: "#f472b6",
-            fontFamily: "var(--font-display)",
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          <span>📷</span> 나도 공유하기
-        </button>
+        {pin.recommendation && (
+          <div style={{ marginTop: 16, padding: 14, borderRadius: 16, background: "rgba(139,92,246,.1)", border: "1px solid rgba(139,92,246,.2)" }}>
+            <strong style={{ color: "#c4b5fd", fontSize: 13 }}>✨ {pin.recommendation.match}% match</strong>
+            <p style={{ marginTop: 6, color: "rgba(255,255,255,.58)", fontSize: 12 }}>Because you enjoy {pin.recommendation.reasons.join(" and ")}.</p>
+            {pin.recommendation.similarUsersLiked && <p style={{ marginTop: 4, color: "rgba(255,255,255,.4)", fontSize: 11 }}>People with similar tastes liked this spot.</p>}
+          </div>
+        )}
+
       </div>
     </div>
   );
 }
 
-function WaypointRow({ pin, onShare }: { pin: Pin; onShare: (p: Pin) => void }) {
+function WaypointRow({ pin }: { pin: Pin }) {
   const [imgError, setImgError] = useState(false);
 
   return (
@@ -244,39 +232,24 @@ function WaypointRow({ pin, onShare }: { pin: Pin; onShare: (p: Pin) => void }) 
         >
           {pin.description}
         </p>
-        <button
-          onClick={(e) => { e.stopPropagation(); onShare(pin); }}
-          className="pressable"
-          style={{
-            background: "none",
-            border: "none",
-            color: "#f472b6",
-            fontFamily: "var(--font-display)",
-            fontWeight: 600,
-            fontSize: 12,
-            cursor: "pointer",
-            padding: 0,
-          }}
-        >
-          📷 공유하기
-        </button>
+        {pin.recommendation && <small style={{ color: "#c4b5fd", fontWeight: 700 }}>✨ {pin.recommendation.match}% match</small>}
       </div>
     </div>
   );
 }
 
-export default function JoyCard({ pin, waypoints, onClose, onShare }: JoyCardProps) {
+export default function JoyCard({ pin, waypoints, onClose, routeStats }: JoyCardProps) {
   const showingPin = !!pin;
   const showingRoute = waypoints.length > 0 && !pin;
   if (!showingPin && !showingRoute) return null;
 
   return (
-    <div className="sheet-enter" style={S.sheet}>
+    <div className="joy-card-shell sheet-enter" style={S.sheet}>
       <div style={S.card}>
         <button onClick={onClose} style={S.closeBtn}>✕</button>
 
         {showingPin && pin && (
-          <PinPhotoCard pin={pin} onShare={onShare} />
+          <PinPhotoCard pin={pin} />
         )}
 
         {showingRoute && (
@@ -321,7 +294,7 @@ export default function JoyCard({ pin, waypoints, onClose, onShare }: JoyCardPro
                   fontSize: 12,
                 }}
               >
-                detour included
+                {routeStats ? `${routeStats.minutes} min` : "detour included"}
               </span>
             </div>
 
@@ -329,7 +302,7 @@ export default function JoyCard({ pin, waypoints, onClose, onShare }: JoyCardPro
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {waypoints.map((wp, i) => (
                 <div key={wp.id}>
-                  <WaypointRow pin={wp} onShare={onShare} />
+                  <WaypointRow pin={wp} />
                   {i < waypoints.length - 1 && (
                     <div
                       style={{
@@ -346,8 +319,15 @@ export default function JoyCard({ pin, waypoints, onClose, onShare }: JoyCardPro
               ))}
             </div>
 
+            {routeStats && (
+              <div style={{ marginTop: 18, padding: 12, borderRadius: 14, background: "rgba(163,230,53,.08)", color: "rgba(255,255,255,.55)", fontSize: 12 }}>
+                Optimized order: {waypoints.map((spot) => spot.emoji).join(" → ")} · +{routeStats.detourMinutes} min detour{routeStats.savedMinutes ? ` · saved ${routeStats.savedMinutes} min` : ""}
+              </div>
+            )}
+
             <button
               id="start-walking-btn"
+              onClick={onClose}
               className="btn-joy"
               style={{ width: "100%", height: 52, fontSize: 15, marginTop: 24 }}
             >

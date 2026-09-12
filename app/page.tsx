@@ -1,211 +1,254 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useState, useCallback } from "react";
-import { useLoadScript } from "@react-google-maps/api";
-import RoutePanel from "@/components/RoutePanel";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import JoyCard from "@/components/JoyCard";
-import ShareModal from "@/components/ShareModal";
-import ShareAtLocationModal from "@/components/ShareAtLocationModal";
-import { Pin, MOCK_PINS } from "@/lib/mockPins";
-import {
-  getBoundingBox,
-  filterPinsInBox,
-  pickWaypoints,
-  buildDirectionsRequest,
-} from "@/lib/routing";
+import MapViewer from "@/components/MapViewer";
+import { Joy, subscribeToJoys } from "@/lib/joys";
+import { buildMockInteractions, Persona, PERSONAS } from "@/lib/mockInteractions";
+import { rankJoySpots, toJoySpot } from "@/lib/recommendation";
 
-const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
-const LIBRARIES: ("places")[] = ["places"];
+const DEFAULT_CENTER = { lat: 40.4433, lng: -79.9436 };
 
-export default function HomePage() {
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
-    libraries: LIBRARIES,
-  });
+function coordinate(lat: string | null, lng: string | null) {
+  if (lat === null || lng === null) return null;
+  const point = { lat: Number(lat), lng: Number(lng) };
+  return Number.isFinite(point.lat) && Number.isFinite(point.lng) ? point : null;
+}
 
-  const [pins, setPins] = useState<Pin[]>(MOCK_PINS);
-  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null);
-  const [activeWaypoints, setActiveWaypoints] = useState<Pin[]>([]);
-  const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [routeSummary, setRouteSummary] = useState<{
-    distance: string; duration: string; detours: number;
-  } | null>(null);
-  const [showPanel, setShowPanel] = useState(false);
-  const [sharePin, setSharePin] = useState<Pin | null>(null);
-  const [shareAtLocation, setShareAtLocation] = useState<{ lat: number; lng: number } | null>(null);
+function MapPageContent() {
+  const searchParams = useSearchParams();
+  const { user, loading: authLoading } = useAuth();
+  const [joys, setJoys] = useState<Joy[]>([]);
+  const [selectedJoy, setSelectedJoy] = useState<Joy | null>(null);
+  const [clusterPins, setClusterPins] = useState<Joy[]>([]);
+  const [clusterFocusedPinId, setClusterFocusedPinId] = useState<string | null>(null);
+  const [center, setCenter] = useState(DEFAULT_CENTER);
+  const [error, setError] = useState("");
+  const [routeSummaryOpen, setRouteSummaryOpen] = useState(true);
 
-  const handleRoute = useCallback(async (origin: string, destination: string) => {
-    if (!isLoaded) return;
-    setIsLoading(true);
-    setSelectedPin(null);
-    try {
-      const geocoder = new google.maps.Geocoder();
-      const [oResult, dResult] = await Promise.all([
-        geocoder.geocode({ address: origin }),
-        geocoder.geocode({ address: destination }),
-      ]);
-      const oLoc = oResult.results[0]?.geometry.location;
-      const dLoc = dResult.results[0]?.geometry.location;
-      if (!oLoc || !dLoc) throw new Error("Could not geocode.");
-      const oLatLng = { lat: oLoc.lat(), lng: oLoc.lng() };
-      const dLatLng = { lat: dLoc.lat(), lng: dLoc.lng() };
-      const bbox = getBoundingBox(oLatLng, dLatLng, 0.4);
-      const filtered = filterPinsInBox(pins, bbox);
-      const chosen = pickWaypoints(filtered, 2);
-      const request = buildDirectionsRequest(origin, destination, chosen);
-      const service = new google.maps.DirectionsService();
-      const result = await service.route(request);
-      setDirections(result);
-      setActiveWaypoints(chosen);
-      const leg = result.routes[0]?.legs[0];
-      setRouteSummary({
-        distance: leg?.distance?.text ?? "—",
-        duration: leg?.duration?.text ?? "—",
-        detours: chosen.length,
-      });
-      setShowPanel(true);
-    } catch (err) {
-      console.error(err);
-      alert("Route failed. Try Pittsburgh addresses.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isLoaded, pins]);
+  const originStr = searchParams.get("origin");
+  const destStr = searchParams.get("dest");
+  const spotIds = searchParams.get("spots") ?? "";
+  const routeIds = useMemo(() => spotIds.split(",").filter(Boolean), [spotIds]);
+  const personaParam = searchParams.get("persona");
+  const persona: Persona = personaParam && personaParam in PERSONAS ? (personaParam as Persona) : "Doyoung";
 
-  const handlePinClick = useCallback((pin: Pin) => {
-    setSelectedPin((prev) => (prev?.id === pin.id ? null : pin));
-    setShowPanel(false);
-  }, []);
+  const displayJoys = useMemo(() => {
+    if (!routeIds.length) return joys;
+    const interactions = buildMockInteractions(joys.map(toJoySpot));
+    return rankJoySpots(persona, joys, interactions);
+  }, [joys, persona, routeIds.length]);
 
-  const handleCardClose = useCallback(() => {
-    setSelectedPin(null);
-    setShowPanel(false);
-  }, []);
-
-  const handleShare = useCallback((pin: Pin) => setSharePin(pin), []);
-
-  const handleShareSubmit = useCallback(
-    (_pinId: string, text: string, _img: string | null) => {
-      alert(`공유 완료 ✨\n"${text}"`);
-    }, []
+  const routeWaypoints = useMemo(
+    () => routeIds.map((id) => displayJoys.find((joy) => joy.id === id)).filter((joy): joy is NonNullable<typeof joy> => !!joy),
+    [displayJoys, routeIds],
   );
 
-  // Share at current location → add new pin immediately to map
-  const handleShareAtLocationSubmit = useCallback((pinData: Omit<Pin, "id">) => {
-    const newPin: Pin = { ...pinData, id: `user-${Date.now()}` };
-    setPins((prev) => [...prev, newPin]);
-    setSelectedPin(newPin);
-  }, []);
+  const originLat = searchParams.get("olat");
+  const originLng = searchParams.get("olng");
+  const destinationLat = searchParams.get("dlat");
+  const destinationLng = searchParams.get("dlng");
+  const originPoint = coordinate(originLat, originLng);
+  const destinationPoint = coordinate(destinationLat, destinationLng);
+  const routeOrigin = originPoint ? `${originPoint.lat},${originPoint.lng}` : originStr;
+  const routeDestination = destinationPoint ? `${destinationPoint.lat},${destinationPoint.lng}` : destStr;
+  const routeStats = {
+    minutes: Number(searchParams.get("minutes")) || 0,
+    detourMinutes: Number(searchParams.get("detour")) || 0,
+    savedMinutes: Number(searchParams.get("saved")) || 0,
+  };
 
-  const activePinIds = new Set(activeWaypoints.map((p) => p.id));
+  const focusedPinId = selectedJoy?.id ?? clusterFocusedPinId;
+
+  useEffect(() => {
+    if (!user) return;
+    return subscribeToJoys(setJoys, () => setError("Could not load joys yet."));
+  }, [user]);
+
+  useEffect(() => {
+    if (selectedJoy) {
+      setCenter({ lat: selectedJoy.lat, lng: selectedJoy.lng });
+    }
+  }, [selectedJoy?.id]);
+
+  const locateMe = () => {
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => setCenter({ lat: coords.latitude, lng: coords.longitude }),
+      () => setError("Location permission is needed to find you."),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  const closeCluster = () => {
+    setClusterPins([]);
+    setClusterFocusedPinId(null);
+  };
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden" style={{ background: "#0d0d12" }}>
-      <MapView
-        waypoints={activeWaypoints}
-        directions={directions}
-        onPinClick={handlePinClick}
-        activePinIds={activePinIds}
-        onShareAtLocation={setShareAtLocation}
-        pins={pins}
-      />
+    <div style={{ position: "relative", width: "100%", height: "100vh", background: "var(--bg-base)", overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0 }}>
+        <MapViewer
+          pins={displayJoys}
+          center={center}
+          zoom={15}
+          origin={routeOrigin}
+          destination={routeDestination}
+          waypoints={routeWaypoints}
+          activePinId={focusedPinId}
+          onPinClick={(pin) => {
+            setSelectedJoy(pin as Joy);
+            setClusterPins([]);
+            setClusterFocusedPinId(pin.id);
+            setRouteSummaryOpen(false);
+          }}
+          onClusterOpen={(pins) => {
+            setSelectedJoy(null);
+            setClusterPins(pins as Joy[]);
+            setClusterFocusedPinId(null);
+            setRouteSummaryOpen(false);
+          }}
+          onMapClick={() => {
+            setSelectedJoy(null);
+            setRouteSummaryOpen(false);
+            closeCluster();
+          }}
+        />
+      </div>
 
-      {/* Top panel */}
-      <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
+      {clusterPins.length > 0 && (
         <div
-          className="pointer-events-auto"
-          style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px 20px 12px" }}
+          className="cluster-overlay"
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 20,
+            margin: "0 auto",
+            width: "min(600px, calc(100% - 32px))",
+            borderRadius: 22,
+            background: "rgba(18, 20, 27, 0.95)",
+            border: "1px solid rgba(255,255,255,.14)",
+            backdropFilter: "blur(20px)",
+            zIndex: 20,
+          }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ padding: "14px 16px", display: "flex", alignItems: "center" }}>
             <div
+              style={{
+                height: 4,
+                width: 42,
+                borderRadius: 999,
+                background: "rgba(255,255,255,.2)",
+                marginRight: "auto",
+              }}
+            />
+            <button
+              type="button"
+              onClick={closeCluster}
+              aria-label="Close cluster list"
               className="pressable"
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: 14,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 22,
-                background: "linear-gradient(135deg, #8b5cf6, #f472b6)",
-                boxShadow: "0 4px 16px rgba(139,92,246,0.5)",
-                flexShrink: 0,
+                border: 0,
+                borderRadius: 999,
+                background: "rgba(255,255,255,.12)",
+                color: "#fff",
+                padding: "6px 12px",
+                fontSize: 12,
               }}
             >
-              🗺️
-            </div>
-            <div>
-              <h1
-                className="text-white"
-                style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 22, letterSpacing: "-0.03em", lineHeight: 1 }}
-              >
-                JoyWalk
-              </h1>
-              <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 3 }}>
-                micro-happiness map
-              </p>
-            </div>
+              Close
+            </button>
           </div>
-
-          <div style={{ marginLeft: "auto" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "7px 12px",
-                borderRadius: 99,
-                background: "rgba(163,230,53,0.12)",
-                border: "1px solid rgba(163,230,53,0.25)",
-              }}
-            >
-              <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "#a3e635", display: "block" }} />
-              <span style={{ color: "#a3e635", fontSize: 11, fontWeight: 600, fontFamily: "var(--font-display)" }}>
-                {pins.length} spots live
-              </span>
+          <div style={{ maxHeight: "44dvh", overflowY: "auto", padding: "0 16px 14px" }}>
+            <p style={{ color: "rgba(255,255,255,.6)", fontSize: 12, marginBottom: 8 }}>Bubble cluster</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {clusterPins.map((pin) => {
+                const isFocused = pin.id === clusterFocusedPinId;
+                return (
+                  <button
+                    key={pin.id}
+                    type="button"
+                    className="pressable"
+                    onClick={() => {
+                      setSelectedJoy(pin);
+                      setClusterFocusedPinId(pin.id);
+                      setCenter({ lat: pin.lat, lng: pin.lng });
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      textAlign: "left",
+                      borderRadius: 14,
+                      border: isFocused ? "1px solid rgba(168, 85, 247, 0.7)" : "1px solid rgba(255,255,255,.12)",
+                      padding: 12,
+                      background: isFocused ? "rgba(168, 85, 247, 0.16)" : "rgba(255,255,255,.04)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 10,
+                        display: "grid",
+                        placeItems: "center",
+                        background: isFocused ? "rgba(168,85,247,.24)" : "rgba(255,255,255,.08)",
+                      }}
+                    >
+                      {pin.emoji}
+                    </span>
+                    <div>
+                      <p style={{ fontWeight: 700 }}>{pin.title}</p>
+                      <p style={{ color: "rgba(255,255,255,.55)", fontSize: 12, marginTop: 2 }}>{pin.description}</p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
+      )}
 
-        <div className="pointer-events-auto" style={{ margin: "0 16px" }}>
-          <div
-            className="glass-card joy-gradient"
-            style={{ borderRadius: 20, padding: 20 }}
-          >
-            <RoutePanel
-              onRoute={handleRoute}
-              isLoading={isLoading}
-              isMapLoaded={isLoaded}
-              routeSummary={routeSummary}
-            />
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, padding: 20, zIndex: 10, pointerEvents: "none" }}>
+            <Link href="/search" style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(18,20,27,.9)", backdropFilter: "blur(20px)", padding: "16px 20px", borderRadius: 20, border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 8px 24px rgba(0,0,0,.4)", textDecoration: "none", color: "rgba(255,255,255,.5)", pointerEvents: "auto" }}>
+          <span>🔍</span>
+          <span style={{ fontSize: 15, fontWeight: 500, color: originStr && destStr ? "#fff" : "inherit" }}>
+            {originStr && destStr ? `${originStr} → ${destStr}` : "Where do you want to go?"}
+          </span>
+        </Link>
+        {(authLoading || error || (!authLoading && joys.length === 0)) && (
+          <div style={{ marginTop: 10, padding: "8px 12px", width: "fit-content", borderRadius: 99, background: "rgba(13,12,20,.8)", color: "rgba(255,255,255,.65)", fontSize: 12 }}>
+            {authLoading ? "Creating your guest ID…" : error || "No joys here yet — add the first one!"}
           </div>
-        </div>
+        )}
+      </div>
+
+      <div style={{ position: "absolute", bottom: 100, left: 20, right: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-end", zIndex: 10, pointerEvents: "none" }}>
+        <button onClick={locateMe} aria-label="Use my location" className="pressable" style={{ width: 52, height: 52, borderRadius: "50%", background: "rgba(18,20,27,.9)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,.1)", color: "#fff", fontSize: 20, boxShadow: "0 8px 24px rgba(0,0,0,.35)", cursor: "pointer", pointerEvents: "auto" }}>
+          📍
+        </button>
+        <Link href="/add" aria-label="Add joy" className="pressable" style={{ width: 64, height: 64, borderRadius: 32, background: "linear-gradient(135deg,rgba(123,110,255,.95),rgba(244,115,177,.95))", color: "#fff", fontSize: 28, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 12px 28px rgba(123,110,255,.45)", textDecoration: "none", pointerEvents: "auto" }}>
+          ✨
+        </Link>
       </div>
 
       <JoyCard
-        pin={selectedPin}
-        waypoints={showPanel ? activeWaypoints : []}
-        onClose={handleCardClose}
-        onShare={handleShare}
+        pin={selectedJoy}
+        waypoints={routeSummaryOpen ? routeWaypoints : []}
+        routeStats={routeStats.minutes ? routeStats : undefined}
+        onClose={() => (selectedJoy ? setSelectedJoy(null) : setRouteSummaryOpen(false))}
       />
+    </div>
+  );
+}
 
-      {sharePin && (
-        <ShareModal
-          pin={sharePin}
-          onClose={() => setSharePin(null)}
-          onSubmit={handleShareSubmit}
-        />
-      )}
-
-      {shareAtLocation && (
-        <ShareAtLocationModal
-          location={shareAtLocation}
-          onClose={() => setShareAtLocation(null)}
-          onSubmit={handleShareAtLocationSubmit}
-        />
-      )}
-    </main>
+export default function MapPage() {
+  return (
+    <Suspense fallback={<div style={{ width: "100%", height: "100vh", background: "var(--bg-base)" }} />}>
+      <MapPageContent />
+    </Suspense>
   );
 }

@@ -8,7 +8,21 @@ export interface Pin {
   imageUrl: string;   // picsum placeholder — replace with real photo later
   author: string;
   sharedAt: string;   // e.g. "2h ago"
+  label?: string;
+  hue?: number;
+  category?: JoyCategory;
+  tags?: string[];
+  song?: { title: string; artist: string };
+  likeCount?: number;
+  visitCount?: number;
+  recommendation?: {
+    match: number;
+    reasons: string[];
+    similarUsersLiked: boolean;
+  };
 }
+
+export type JoyCategory = "dog" | "nature" | "cafe" | "music" | "art" | "view" | "food" | "other";
 
 // Mock pins seeded around CMU / Oakland / Shadyside area, Pittsburgh
 // imageUrl uses picsum.photos/seed/{id}/600/400 for consistent placeholder per pin
