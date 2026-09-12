@@ -6,6 +6,8 @@ export interface Pin {
   description: string;
   emoji: string;
   imageUrl: string;   // picsum placeholder — replace with real photo later
+  photoCredit?: string;
+  photoCreditUrl?: string;
   author: string;
   sharedAt: string;   // e.g. "2h ago"
   label?: string;

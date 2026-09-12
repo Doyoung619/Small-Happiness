@@ -12,8 +12,28 @@ import { createJoy } from "@/lib/joys";
 import { searchSongs, Song } from "@/lib/music";
 
 const MAX_CHARS = 100;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_SIDE = 2048;
 const DEFAULT_LOCATION = { lat: 40.4433, lng: -79.9436 };
 const libraries: ("places")[] = ["places"];
+
+async function compressPhoto(file: File) {
+  if (file.size <= MAX_UPLOAD_BYTES) return file;
+  const image = await createImageBitmap(file);
+  const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not prepare this image.");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  image.close();
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+  if (!blob) throw new Error("Could not compress this image.");
+  return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "joy"}.jpg`, { type: "image/jpeg" });
+}
 
 function getLocation() {
   return new Promise<GeolocationPosition>((resolve, reject) => {
@@ -69,15 +89,17 @@ export default function AddJoyPage() {
 
   const choosePhoto = async (file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Please choose an image smaller than 5 MB.");
+    setError("");
+    const coordinates = await gps(file).catch(() => undefined);
+    const uploadPhoto = await compressPhoto(file).catch(() => undefined);
+    if (!uploadPhoto) {
+      setError("Could not compress this image. Please choose another photo.");
       return;
     }
-    setPhoto(file);
+    setPhoto(uploadPhoto);
     const reader = new FileReader();
     reader.onload = () => setPreview(String(reader.result));
-    reader.readAsDataURL(file);
-    const coordinates = await gps(file).catch(() => undefined);
+    reader.readAsDataURL(uploadPhoto);
     if (coordinates && Number.isFinite(coordinates.latitude) && Number.isFinite(coordinates.longitude)) {
       const location = { lat: coordinates.latitude, lng: coordinates.longitude };
       setPinLocation(location);

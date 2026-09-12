@@ -127,6 +127,17 @@ function PinPhotoCard({ pin }: { pin: Pin }) {
         <div style={{ position: "absolute", bottom: 14, left: 20, fontSize: 36, lineHeight: 1 }}>
           {pin.emoji}
         </div>
+
+        {pin.photoCredit && (
+          <a
+            href={pin.photoCreditUrl || "https://maps.google.com"}
+            target="_blank"
+            rel="noreferrer"
+            style={{ position: "absolute", right: 14, bottom: 14, color: "rgba(255,255,255,.72)", fontSize: 9, textDecoration: "none" }}
+          >
+            Photo: {pin.photoCredit} · Google
+          </a>
+        )}
       </div>
 
       {/* Content */}
