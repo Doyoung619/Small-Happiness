@@ -165,7 +165,7 @@ function MapPageContent() {
   };
 
     return (
-    <div style={{ position: "relative", width: "100%", height: "100vh", background: "var(--bg-base)", overflow: "hidden" }}>
+    <div className="viewport-page" style={{ position: "relative", width: "100%", background: "var(--bg-base)", overflow: "hidden" }}>
       {pathname === "/" && (
         <div
           style={{
@@ -395,7 +395,7 @@ function MapPageContent() {
 
 export default function MapPage() {
   return (
-    <Suspense fallback={<div style={{ width: "100%", height: "100vh", background: "var(--bg-base)" }} />}>
+    <Suspense fallback={<div className="viewport-page" style={{ width: "100%", background: "var(--bg-base)" }} />}>
       <MapPageContent />
     </Suspense>
   );

@@ -18,9 +18,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-body antialiased" style={{ background: "#0d0c14", color: "#fff" }}>
         <AuthProvider>
-          <main style={{ paddingBottom: "80px", minHeight: "100vh" }}>
-            {children}
-          </main>
+          <main>{children}</main>
           <BottomNav />
         </AuthProvider>
       </body>

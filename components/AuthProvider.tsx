@@ -35,13 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signingIn = useRef(false);
 
   useEffect(() => {
-    void setPersistence(auth, browserLocalPersistence);
+    void setPersistence(auth, browserLocalPersistence).catch(() => {});
     return onAuthStateChanged(auth, (nextUser) => {
       if (nextUser) {
         signingIn.current = false;
         setUser(nextUser);
         setLoading(false);
-        void ensureUserProfile(nextUser);
+        void ensureUserProfile(nextUser).catch(() => {});
       } else if (!signingIn.current) {
         signingIn.current = true;
         signInAnonymously(auth).catch(() => {

@@ -93,7 +93,7 @@ export default function ExplorePage() {
       <style>{`
         .explore-container{display:flex;flex-direction:column;height:100dvh;overflow-y:auto;overscroll-behavior:contain;background:#0d0c14}
         .explore-feed{padding:20px;flex:1}.explore-map{height:300px;margin-bottom:80px}
-        @media(min-width:1024px){.explore-container{flex-direction:row;height:100vh;overflow:hidden}.explore-feed{width:420px;overflow-y:auto}.explore-map{flex:1;height:100vh;margin:0}}
+        @media(min-width:1024px){.explore-container{flex-direction:row;height:100vh;height:100dvh;overflow:hidden}.explore-feed{width:420px;overflow-y:auto}.explore-map{flex:1;height:100vh;height:100dvh;margin:0}}
       `}</style>
     </div>
   );
