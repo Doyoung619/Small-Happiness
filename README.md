@@ -22,6 +22,12 @@ JoyWalk는 바쁜 일상 속 이동 시간을 조금 더 즐겁게 만들어주�
 * Apple의 유체 인터페이스(Fluid Interface) 디자인을 모티브로 한 부드러운 애니메이션과 반응형 상호작용(스프링 효과, 글래스모피즘)을 적용했습니다.
 * 어두운 배경(Dark Mode)에 네온 컬러(Purple, Pink, Lime)를 활용한 트렌디한 '도파민 팔레트' 디자인을 채택했습니다.
 
+### 4. 𝕏 Grok 실시간 Spot 발견
+* 서버에서 xAI Responses API의 `grok-4.6` 모델과 `x_search` 도구를 사용해 최근 피츠버그의 공개 X 게시물을 탐색합니다.
+* 공개적으로 방문 가능한 장소와 정확한 X 게시물 링크가 있는 결과만 검증해 지도 버블로 변환합니다.
+* 결과를 6시간 캐시하고 기존 커뮤니티 Spot을 항상 먼저 보여주므로 API 지연·한도 초과 상황에도 데모가 중단되지 않습니다.
+* API 키는 클라이언트 번들에 포함하지 않고 배포 환경의 `XAI_API_KEY` 시크릿으로만 사용합니다.
+
 ---
 
 ## 🛠️ 기술 스택 (Tech Stack)
@@ -34,6 +40,7 @@ JoyWalk는 바쁜 일상 속 이동 시간을 조금 더 즐겁게 만들어주�
   * Directions API (경유지가 포함된 도보 경로 탐색)
   * Geocoding API (좌표 <-> 주소 변환)
 * **웹캠 제어**: `navigator.mediaDevices.getUserMedia` API 활용 (순수 웹 표준 기술)
+* **AI Spot Discovery**: xAI Responses API + Grok 4.6 + X Search + JSON Schema Structured Outputs
 
 ---
 

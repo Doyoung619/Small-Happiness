@@ -161,6 +161,22 @@ function PinPhotoCard({ pin }: { pin: Pin }) {
           </div>
         )}
 
+        {pin.sourceLabel && (
+          pin.sourceUrl ? (
+            <a
+              href={pin.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="pressable"
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 16, padding: "8px 12px", borderRadius: 999, background: "rgba(29,161,242,.12)", border: "1px solid rgba(29,161,242,.24)", color: "#8ed0ff", textDecoration: "none", fontSize: 12, fontWeight: 700 }}
+            >
+              𝕏 {pin.sourceLabel} ↗
+            </a>
+          ) : (
+            <p style={{ marginTop: 14, color: "rgba(255,255,255,.38)", fontSize: 11 }}>{pin.sourceLabel}</p>
+          )
+        )}
+
         {pin.song && (
           <a href={pin.song.url} target="_blank" rel="noreferrer" className="pressable" style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, padding: 10, borderRadius: 16, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.09)", color: "#fff", textDecoration: "none" }}>
             <img src={pin.song.artworkUrl} alt="" style={{ width: 48, height: 48, borderRadius: 10, objectFit: "cover" }} />

@@ -9,13 +9,15 @@ interface BubblePinProps {
   bursting?: boolean;
   floatDelay?: number;
   floatPaused?: boolean;
+  sourceType?: "community" | "grok-x";
 }
 
-export default function BubblePin({ emoji, hue = 223, selected = false, bursting = false, floatDelay = 0, floatPaused = false }: BubblePinProps) {
+export default function BubblePin({ emoji, hue = 223, selected = false, bursting = false, floatDelay = 0, floatPaused = false, sourceType }: BubblePinProps) {
   return (
     <div className={`joy-bubble-container ${bursting ? "joy-bubble-container--bursting" : ""} ${floatPaused ? "joy-bubble-container--paused" : ""}`} style={{ "--hue": hue, "--float-delay": `${floatDelay}s` } as CSSProperties}>
       <div className={`joy-bubble ${selected ? "joy-bubble--active" : ""} ${bursting ? "joy-bubble--bursting" : ""}`}>
         <div className="joy-bubble-emoji">{emoji}</div>
+        {sourceType === "grok-x" && <span className="joy-bubble-source" aria-label="Discovered by Grok on X">𝕏</span>}
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
@@ -68,6 +70,24 @@ export default function BubblePin({ emoji, hue = 223, selected = false, bursting
           font-size: 26px;
           z-index: 10;
           pointer-events: none;
+        }
+
+        .joy-bubble-source {
+          position: absolute;
+          right: -4px;
+          bottom: -3px;
+          z-index: 12;
+          width: 20px;
+          height: 20px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          border: 2px solid #fff;
+          background: #0b0b0f;
+          color: #fff;
+          font-size: 10px;
+          font-weight: 900;
+          box-shadow: 0 3px 8px rgba(0,0,0,.35);
         }
 
         .joy-bubble--active {

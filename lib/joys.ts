@@ -1,5 +1,5 @@
 import { normalizeLanguage } from "./languages";
-import { MOCK_PINS, Pin } from "./mockPins";
+import { MOCK_PINS, Pin, SEUNGYEON_PINS } from "./mockPins";
 import { Song } from "./music";
 
 export type Joy = Pin & {
@@ -9,11 +9,13 @@ export type Joy = Pin & {
 };
 
 const LOCAL_JOYS_KEY = "joywalk-demo-joys";
+const GROK_SPOTS_KEY = "joywalk-grok-spots-v1";
+const GROK_CACHE_MS = 6 * 60 * 60 * 1000;
 
-function seededJoys(): Joy[] {
-  return MOCK_PINS.map((pin, index) => ({
+function asPublicJoys(pins: Pin[], prefix: string): Joy[] {
+  return pins.map((pin, index) => ({
     ...pin,
-    authorId: `demo-${index + 1}`,
+    authorId: `${prefix}-${index + 1}`,
     visibility: "public",
     category: pin.category || "other",
     tags: pin.tags?.length ? pin.tags : ["hidden gem"],
@@ -21,12 +23,30 @@ function seededJoys(): Joy[] {
   }));
 }
 
+function seededJoys(): Joy[] {
+  return [
+    ...asPublicJoys(SEUNGYEON_PINS, "seungyeon"),
+    ...asPublicJoys(MOCK_PINS, "demo"),
+  ];
+}
+
+function cachedGrokJoys(): Joy[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const cached = JSON.parse(localStorage.getItem(GROK_SPOTS_KEY) || "null") as { expiresAt?: number; spots?: Pin[] } | null;
+    if (!cached?.expiresAt || cached.expiresAt < Date.now() || !Array.isArray(cached.spots)) return [];
+    return asPublicJoys(cached.spots, "grok-x");
+  } catch {
+    return [];
+  }
+}
+
 function localJoys(): Joy[] {
   if (typeof window === "undefined") return seededJoys();
   try {
     const saved = JSON.parse(localStorage.getItem(LOCAL_JOYS_KEY) || "[]") as Array<Joy & { expiresAt?: number }>;
     const now = Date.now();
-    return [...saved.filter((joy) => !joy.expiresAt || joy.expiresAt > now), ...seededJoys()];
+    return [...saved.filter((joy) => !joy.expiresAt || joy.expiresAt > now), ...cachedGrokJoys(), ...seededJoys()];
   } catch {
     return seededJoys();
   }
@@ -48,6 +68,19 @@ export function subscribeToJoys(
   void onError;
   const load = () => alive && onData(localJoys());
   load();
+  void fetch("/api/x-spots")
+    .then((response) => response.ok ? response.json() : Promise.reject(new Error("X Search request failed")))
+    .then((payload: { spots?: Pin[] }) => {
+      if (!Array.isArray(payload.spots) || payload.spots.length === 0) return;
+      localStorage.setItem(GROK_SPOTS_KEY, JSON.stringify({
+        spots: payload.spots,
+        expiresAt: Date.now() + GROK_CACHE_MS,
+      }));
+      load();
+    })
+    .catch(() => {
+      // The seeded community map remains fully usable while Grok refreshes.
+    });
   const refresh = () => load();
   window.addEventListener("joywalk:joys-changed", refresh);
   window.addEventListener("storage", refresh);

@@ -227,7 +227,7 @@ export default function MapViewer({
                 className="map-bubble-button"
                 style={{ position: "absolute", transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", cursor: "pointer", pointerEvents: "auto", border: 0, padding: 0, background: "none", color: "#111827" }}
               >
-                <BubblePin emoji={pin.emoji} hue={pin.hue} selected={activePinId === pin.id} bursting={burstingPinId === pin.id} floatDelay={-(index % 7) * 0.35} floatPaused={mapMoving} />
+                <BubblePin emoji={pin.emoji} hue={pin.hue} selected={activePinId === pin.id} bursting={burstingPinId === pin.id} floatDelay={-(index % 7) * 0.35} floatPaused={mapMoving} sourceType={pin.sourceType} />
                 {pin.label && <span style={{ fontSize: "11px", fontWeight: 600, color: "#111827", pointerEvents: "none", whiteSpace: "nowrap" }}>{pin.label}</span>}
               </button>
             );
